@@ -1,50 +1,115 @@
-# SchwammyRecovery
+# Schwammy Recovery
 
-Small .NET 8 console app for recovering the old Schwammy Says WordPress blog
-from Internet Archive/Wayback Machine monthly archive pages.
+A tool for recovering content from an old website using the Internet Archive's Wayback Machine.
 
-## First test
+The original **Schwammy Says** website was a WordPress blog that is no longer available online. This project is being used to recover its posts, comments, images, and other content from archived copies in the Wayback Machine.
 
-Install .NET 8 SDK, then:
+The immediate goal is to recover the content into a clean, portable form that can eventually be imported into a new blogging platform such as Ghost.
 
-```bash
-dotnet restore
-dotnet run -- "https://web.archive.org/web/20220925020544/http://www.schwammysays.net/2007/03/"
-```
+## Recovery Pipeline
 
-The program will crawl the supplied monthly archive and its `/page/2/`,
-`/page/3/`, etc. pagination, then write:
+The recovery process is divided into independent, repeatable steps:
+
+1. **Discover post URLs**
+2. **Recover Wayback HTML**
+3. **Extract post content**
+4. **Clean / normalize extracted content**
+5. **Recover images**
+6. **Convert to Markdown**
+7. **Review recovered posts**
+8. **Export to Ghost**
+
+Each step produces files on disk that become the input to the next step. This makes the recovery process inspectable and allows individual steps to be rerun without repeating the entire process.
+
+The original archived HTML is preserved so that extracted and cleaned content can always be traced back to the source.
+
+## Output Structure
+
+Recovery data is stored under `output/`:
 
 ```text
-output/post-urls.json
+output/
+├── discovery/
+│   └── post-urls.json
+├── recovered/
+│   └── <slug>/
+│       ├── capture.json
+│       └── source.html
+├── extracted/
+│   └── <slug>/
+│       ├── post.json
+│       ├── content.html
+│       └── comments.json
+├── cleaned/
+│   └── <slug>/
+│       ├── post.json
+│       ├── content.html
+│       └── comments.json
+├── images/
+│   └── <slug>/
+│       ├── image-001.jpg
+│       └── image-002.png
+└── markdown/
+    └── <slug>/
+        └── post.md
 ```
 
-The first version deliberately does NOT download every post yet. We want to
-verify that URL discovery is correct before adding the recovery/extraction
-stage.
+`output/` is generated data and is not part of the application's source code.
 
-## Expected result
+## Design Principles
 
-For March 2007, the console should show lines like:
+The project is intentionally built as a series of small, independent steps rather than one large recovery process.
+
+### Preserve the source
+
+The HTML recovered from the Wayback Machine is retained as-is in `recovered/<slug>/source.html`.
+
+Later processing should never modify this original source.
+
+### Make steps repeatable
+
+Each step checks whether its expected output already exists and skips work that has already been completed.
+
+To rerun a step for a particular post, its generated output can be removed and the step run again.
+
+### Keep intermediate results
+
+Extraction, cleanup, image recovery, and Markdown conversion are separate stages so that the results of each stage can be inspected independently.
+
+This is particularly important when recovering old content, where archived HTML may contain unexpected markup, rewritten URLs, missing assets, or other artifacts.
+
+### Keep source-specific knowledge isolated
+
+The current project is specifically recovering WordPress posts, so the extraction logic necessarily understands WordPress markup.
+
+Where practical, source-specific behavior is kept separate from the pipeline itself. This leaves room for other extractors or sources in the future without designing a generalized framework prematurely.
+
+## Current Status
+
+The following stages are currently implemented:
+
+* Post URL discovery
+* Wayback capture recovery
+* Post and comment extraction
+
+The remaining stages will be implemented incrementally as the recovered content is inspected and additional requirements become clear.
+
+## Running the Application
+
+The application is a .NET console application.
+
+Run it from the project directory:
 
 ```text
-POST: https://www.schwammysays.net/have-you-checked-out-resharper/
+dotnet run
 ```
 
-and other original Schwammy Says post URLs.
+The application presents a menu for selecting a recovery step.
 
-## Important
+## Important Notes
 
-This program stops if Wayback returns HTTP 429 rather than retrying aggressively.
-Please keep the request rate low. Once discovery is proven, we'll add polite
-delays, capture selection, HTML extraction, and image recovery.
+The Wayback Machine is not a database backup. Archived pages may be incomplete, unavailable, or modified by the archive.
 
-## Next stages
+A successful recovery therefore does not necessarily mean that every part of the original website has been recovered.
 
-1. Verify March 2007 URL discovery.
-2. Crawl all monthly archives from March 2007 onward.
-3. Find usable Wayback captures for each post.
-4. Save raw HTML locally.
-5. Extract title/date/author/content/categories/tags.
-6. Recover images/media where possible.
-7. Generate a Ghost import file.
+The goal of this project is to preserve as much of the original content as possible while maintaining a clear chain from the archived source to the final recovered content.
