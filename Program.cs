@@ -1,10 +1,6 @@
 using SchwammyRecovery;
 
-var startUrl = args.Length > 0
-    ? args[0]
-    : "https://web.archive.org/web/20220925020544/http://www.schwammysays.net/2007/03/";
-
-var outputDirectory = args.Length > 1 ? args[1] : "output";
+var outputDirectory = "output";
 
 using var http = new HttpClient(new HttpClientHandler
 {
@@ -14,10 +10,15 @@ using var http = new HttpClient(new HttpClientHandler
 http.DefaultRequestHeaders.UserAgent.ParseAdd(
     "SchwammyRecovery/0.1 (+personal blog recovery project)");
 
-var client = new WaybackClient(http);
-var crawler = new ArchiveCrawler(client, outputDirectory);
+var wayback = new WaybackClient(http);
 
-await crawler.CrawlArchiveAsync(startUrl);
+var recovery = new WaybackRecoveryStep(
+    wayback,
+    outputDirectory);
+
+await recovery.RecoverAsync(
+    "http://www.schwammysays.net/have-you-checked-out-resharper/");
 
 Console.WriteLine();
-Console.WriteLine($"Done. Results are in: {Path.GetFullPath(outputDirectory)}");
+Console.WriteLine(
+    $"Done. Results are in: {Path.GetFullPath(outputDirectory)}");
