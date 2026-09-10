@@ -54,6 +54,10 @@ while (true)
             break;
 
         case "3":
+            await RunExtractionAsync(
+                outputDirectory,
+                logger);
+            break;
         case "4":
         case "5":
         case "6":
@@ -124,4 +128,44 @@ static async Task RunRecoveryAsync(
 
     logger.Log();
     logger.Log("Recovery step complete.");
+}
+static async Task RunExtractionAsync(
+    string outputDirectory,
+    Logger logger)
+{
+    var postUrlPath = Path.Combine(
+        outputDirectory,
+        "discovery",
+        "post-urls.json");
+
+    var reader = new PostUrlReader();
+
+    var postUrls = await reader.ReadAsync(postUrlPath);
+
+    var extraction = new PostExtractionStep(
+        outputDirectory,
+        logger);
+
+    foreach (var postUrl in postUrls)
+    {
+        var uri = new Uri(postUrl);
+
+        var slug = uri.AbsolutePath
+            .Trim('/')
+            .Split('/')
+            .Last();
+
+        if (string.IsNullOrWhiteSpace(slug))
+        {
+            logger.Log(
+                $"Skipping URL with no slug: {postUrl}");
+
+            continue;
+        }
+
+        await extraction.ExtractAsync(slug);
+    }
+
+    logger.Log();
+    logger.Log("Extraction step complete.");
 }
