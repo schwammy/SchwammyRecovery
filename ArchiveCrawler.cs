@@ -9,17 +9,18 @@ public sealed class ArchiveCrawler
     private readonly string _output;
     private readonly HashSet<string> _visitedArchivePages = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _postUrls = new(StringComparer.OrdinalIgnoreCase);
-
-    public ArchiveCrawler(WaybackClient client, string output)
+    private readonly Logger _logger;
+    public ArchiveCrawler(WaybackClient client, string output, Logger logger)
     {
         _client = client;
         _output = output;
+        _logger = logger;
         Directory.CreateDirectory(_output);
     }
 
     public async Task CrawlArchiveAsync(string startUrl)
     {
-        Console.WriteLine($"Starting at:\n  {startUrl}\n");
+        _logger.Log($"Starting at:\n  {startUrl}\n");
 
         // Phase 1: crawl the supplied monthly archive and its pagination.
         await CrawlArchivePageAsync(startUrl);
@@ -32,7 +33,7 @@ public sealed class ArchiveCrawler
             Path.Combine(_output, "post-urls.json"),
             JsonSerializer.Serialize(posts, new JsonSerializerOptions { WriteIndented = true }));
 
-        Console.WriteLine($"\nDiscovered {posts.Length} unique post URLs.");
+        _logger.Log($"\nDiscovered {posts.Length} unique post URLs.");
     }
 
     private async Task CrawlArchivePageAsync(string archiveUrl)
@@ -40,16 +41,16 @@ public sealed class ArchiveCrawler
         if (!_visitedArchivePages.Add(archiveUrl))
             return;
 
-        Console.WriteLine();
-        Console.WriteLine($"==================================================");
-        Console.WriteLine($"Archive: {archiveUrl}");
-        Console.WriteLine($"==================================================");
+        _logger.Log();
+        _logger.Log($"==================================================");
+        _logger.Log($"Archive: {archiveUrl}");
+        _logger.Log($"==================================================");
 
         var html = await _client.GetHtmlAsync(archiveUrl);
 
         if (html is null)
         {
-            Console.WriteLine($"  ERROR: Could not retrieve archive page.");
+            _logger.Log($"  ERROR: Could not retrieve archive page.");
             return;
         }
 
@@ -82,7 +83,7 @@ public sealed class ArchiveCrawler
             {
                 if (SameOriginalMonth(archiveUrl, absolute))
                 {
-                    Console.WriteLine(
+                    _logger.Log(
                         $"  Following pagination: {absolute}");
 
                     await CrawlArchivePageAsync(absolute);
@@ -100,7 +101,7 @@ public sealed class ArchiveCrawler
 
             if (_postUrls.Add(original))
             {
-                Console.WriteLine(
+                _logger.Log(
                     $"  POST [{GetArchiveDescription(archiveUrl)}]: {original}");
             }
         }

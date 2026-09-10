@@ -6,13 +6,15 @@ public sealed class WaybackRecoveryStep
 {
     private readonly WaybackClient _wayback;
     private readonly string _output;
-
+    private readonly Logger _logger;
     public WaybackRecoveryStep(
         WaybackClient wayback,
-        string output)
+        string output,
+        Logger logger)
     {
         _wayback = wayback;
         _output = output;
+        _logger = logger;
     }
 
     public async Task RecoverAsync(
@@ -40,13 +42,13 @@ public sealed class WaybackRecoveryStep
         if (File.Exists(sourcePath) &&
             File.Exists(capturePath))
         {
-            Console.WriteLine($"  SKIP: {postUrl}");
-            Console.WriteLine("        Already recovered.");
+            _logger.Log($"  SKIP: {postUrl}");
+            _logger.Log("        Already recovered.");
             return;
         }
 
-        Console.WriteLine();
-        Console.WriteLine($"  Recovering: {postUrl}");
+        _logger.Log();
+        _logger.Log($"  Recovering: {postUrl}");
 
         var captures = await _wayback.GetCapturesAsync(
             postUrl,
@@ -54,11 +56,11 @@ public sealed class WaybackRecoveryStep
 
         if (captures.Count == 0)
         {
-            Console.WriteLine("  No HTML captures found.");
+            _logger.Log("  No HTML captures found.");
             return;
         }
 
-        Console.WriteLine(
+        _logger.Log(
             $"  Found {captures.Count} HTML capture(s).");
 
         foreach (var capture in captures
@@ -66,7 +68,7 @@ public sealed class WaybackRecoveryStep
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            Console.WriteLine(
+            _logger.Log(
                 $"  Trying {capture.Timestamp}");
 
             var html = await _wayback.GetCaptureHtmlAsync(
@@ -75,9 +77,11 @@ public sealed class WaybackRecoveryStep
 
             if (string.IsNullOrWhiteSpace(html))
             {
-                Console.WriteLine("    Not usable.");
+                _logger.Log("    Not usable.");
                 continue;
             }
+
+            Directory.CreateDirectory(postDirectory);
 
             await File.WriteAllTextAsync(
                 sourcePath,
@@ -96,14 +100,14 @@ public sealed class WaybackRecoveryStep
                 json,
                 cancellationToken);
 
-            Console.WriteLine("  SUCCESS");
-            Console.WriteLine($"    HTML:    {sourcePath}");
-            Console.WriteLine($"    Capture: {capturePath}");
+            _logger.Log("  SUCCESS");
+            _logger.Log($"    HTML:    {sourcePath}");
+            _logger.Log($"    Capture: {capturePath}");
 
             return;
         }
 
-        Console.WriteLine(
+        _logger.Log(
             "  FAILED: No usable capture found.");
     }
 

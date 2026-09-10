@@ -6,10 +6,12 @@ namespace SchwammyRecovery;
 public sealed class WaybackClient
 {
     private readonly HttpClient _http;
+    private readonly Logger _logger;
 
-    public WaybackClient(HttpClient http)
+    public WaybackClient(HttpClient http, Logger logger)
     {
         _http = http;
+        _logger = logger;
     }
 
     public async Task<string?> GetHtmlAsync(
@@ -23,7 +25,7 @@ public sealed class WaybackClient
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
-                Console.WriteLine(
+                _logger.Log(
                     "Wayback returned HTTP 429. " +
                     "Stopping to avoid hammering the archive.");
 
@@ -32,7 +34,7 @@ public sealed class WaybackClient
 
             if (!response.IsSuccessStatusCode)
             {
-                Console.WriteLine(
+                _logger.Log(
                     $"HTTP {(int)response.StatusCode}: {url}");
 
                 return null;
@@ -44,7 +46,7 @@ public sealed class WaybackClient
         catch (Exception ex) when (
             ex is HttpRequestException or TaskCanceledException)
         {
-            Console.WriteLine(
+            _logger.Log(
                 $"Request failed: {ex.Message}");
 
             return null;
