@@ -1,25 +1,57 @@
 using System.Text.Json;
 
-namespace SchwammyRecovery;
+namespace SchwammyRecovery.Steps;
 
-public sealed class WaybackRecoveryStep
+public sealed class WaybackRecoveryStep : IStep
 {
+    private readonly PostUrlReader _postUrlReader;
     private readonly WaybackClient _wayback;
     private readonly string _output;
     private readonly Logger _logger;
+
     public WaybackRecoveryStep(
+        PostUrlReader postUrlReader,
         WaybackClient wayback,
         string output,
         Logger logger)
     {
+        _postUrlReader = postUrlReader;
         _wayback = wayback;
         _output = output;
         _logger = logger;
     }
 
-    public async Task RecoverAsync(
-        string postUrl,
+    public async Task RunAsync(
         CancellationToken cancellationToken = default)
+    {
+        var postUrlPath = Path.Combine(
+            _output,
+            "discovery",
+            "post-urls.json");
+
+        var postUrls = await _postUrlReader.ReadAsync(
+            postUrlPath);
+
+        _logger.Log();
+        _logger.Log(
+            $"Found {postUrls.Count} post URL(s) to recover.");
+
+        foreach (var postUrl in postUrls)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await RecoverAsync(
+                postUrl,
+                cancellationToken);
+        }
+
+        _logger.Log();
+        _logger.Log("Recovery step complete.");
+    }
+
+    private async Task RecoverAsync(
+        string postUrl,
+        CancellationToken cancellationToken)
     {
         var slug = GetSlug(postUrl);
 
@@ -81,8 +113,6 @@ public sealed class WaybackRecoveryStep
                 continue;
             }
 
-            Directory.CreateDirectory(postDirectory);
-
             await File.WriteAllTextAsync(
                 sourcePath,
                 html,
@@ -111,17 +141,13 @@ public sealed class WaybackRecoveryStep
             "  FAILED: No usable capture found.");
     }
 
-    private static string GetSlug(string url)
+    private static string GetSlug(string postUrl)
     {
-        var uri = new Uri(url);
+        var uri = new Uri(postUrl);
 
-        var slug = uri.AbsolutePath
+        return uri.AbsolutePath
             .Trim('/')
-            .Split('/')
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
             .Last();
-
-        return string.IsNullOrWhiteSpace(slug)
-            ? "unknown-post"
-            : slug;
     }
 }

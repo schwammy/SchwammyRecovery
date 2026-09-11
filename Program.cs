@@ -1,4 +1,6 @@
 using SchwammyRecovery;
+using Microsoft.Extensions.DependencyInjection;
+using SchwammyRecovery.Steps;
 
 var outputDirectory = "output";
 
@@ -12,9 +14,21 @@ using var http = new HttpClient(new HttpClientHandler
 http.DefaultRequestHeaders.UserAgent.ParseAdd(
     "SchwammyRecovery/0.1 (+personal blog recovery project)");
 
-var wayback = new WaybackClient(
-    http,
-    logger);
+var services = new ServiceCollection();
+
+services.AddSingleton(outputDirectory);
+services.AddSingleton(logger);
+services.AddSingleton(http);
+services.AddTransient<PostUrlReader>();
+services.AddTransient<WaybackRecoveryStep>();
+services.AddSingleton<WaybackClient>();
+
+using var serviceProvider = services.BuildServiceProvider();
+
+var wayback = new WaybackClient(http, logger);
+
+var waybackRecoveryStep =
+    serviceProvider.GetRequiredService<WaybackRecoveryStep>();
 
 while (true)
 {
@@ -47,10 +61,7 @@ while (true)
             break;
 
         case "2":
-            await RunRecoveryAsync(
-                wayback,
-                outputDirectory,
-                logger);
+            await waybackRecoveryStep.RunAsync();
             break;
 
         case "3":
@@ -99,36 +110,6 @@ static async Task RunDiscoveryAsync(
     await crawler.CrawlArchiveAsync(startUrl);
 }
 
-static async Task RunRecoveryAsync(
-    WaybackClient wayback,
-    string outputDirectory,
-    Logger logger)
-{
-    var postUrlPath = Path.Combine(
-        outputDirectory,
-        "discovery",
-        "post-urls.json");
-
-    var reader = new PostUrlReader();
-
-    var postUrls = await reader.ReadAsync(postUrlPath);
-
-    logger.Log(
-        $"Found {postUrls.Count} post URL(s) to recover.");
-
-    var recovery = new WaybackRecoveryStep(
-        wayback,
-        outputDirectory,
-        logger);
-
-    foreach (var postUrl in postUrls)
-    {
-        await recovery.RecoverAsync(postUrl);
-    }
-
-    logger.Log();
-    logger.Log("Recovery step complete.");
-}
 static async Task RunExtractionAsync(
     string outputDirectory,
     Logger logger)
