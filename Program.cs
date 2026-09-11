@@ -26,6 +26,9 @@ services.AddSingleton<WaybackClient>();
 services.AddScoped<IRecoveredPostEnumerationService, RecoveredPostEnumerationService>();
 services.AddScoped<IWordPressPostExtractor, WordPressPostExtractor>();
 services.AddScoped<IWordPressCommentExtractor, WordPressCommentExtractor>();
+services.AddScoped<IImageExtractor, ImageExtractor>();
+services.AddScoped<IImageDownloader, ImageDownloader>();
+services.AddScoped<IExtractedPostEnumerationService, ExtractedPostEnumerationService>();
 
 using var serviceProvider = services.BuildServiceProvider();
 
@@ -43,10 +46,22 @@ var crawler = new ArchiveCrawler(
 var discoveryStep = new DiscoveryStep(
     crawler);
 var waybackRecoveryStep = serviceProvider.GetRequiredService<WaybackRecoveryStep>();
+
 var extractionStep = new ExtractionStep(serviceProvider.GetRequiredService<IRecoveredPostEnumerationService>(),
     serviceProvider.GetRequiredService<IWordPressPostExtractor>(),
     serviceProvider.GetRequiredService<IWordPressCommentExtractor>(),
+    serviceProvider.GetRequiredService<IImageExtractor>(),
     outputDirectory,
+    logger);
+
+var extractedDirectory = Path.Combine(
+    outputDirectory,
+    "extracted");
+
+var downloadStep = new ImageDownloadStep(
+    serviceProvider.GetRequiredService<IExtractedPostEnumerationService>(),
+    serviceProvider.GetRequiredService<IImageDownloader>(),
+    extractedDirectory,
     logger);
 
 while (true)
@@ -83,6 +98,8 @@ while (true)
             await extractionStep.RunAsync();
             break;
         case "4":
+            await downloadStep.RunAsync();
+            break;
         case "5":
         case "6":
         case "7":

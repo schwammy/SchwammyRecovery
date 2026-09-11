@@ -9,11 +9,13 @@ public sealed class ExtractionStep : IStep
     private readonly IRecoveredPostEnumerationService _recoveredPostEnumerationService;
     private readonly IWordPressPostExtractor _wordPressPostExtractor;
     private readonly IWordPressCommentExtractor _wordPressCommentExtractor;
+    private readonly IImageExtractor _imageExtractor;
 
     public ExtractionStep(
         IRecoveredPostEnumerationService recoveredPostEnumerationService,
         IWordPressPostExtractor wordPressPostExtractor,
         IWordPressCommentExtractor wordPressCommentExtractor,
+        IImageExtractor imageExtractor,
         string outputDirectory,
         Logger logger)
     {
@@ -21,6 +23,7 @@ public sealed class ExtractionStep : IStep
         _wordPressPostExtractor = wordPressPostExtractor;
         _wordPressCommentExtractor = wordPressCommentExtractor;
         _outputDirectory = outputDirectory;
+        _imageExtractor = imageExtractor;
         _logger = logger;
     }
 
@@ -43,6 +46,10 @@ public sealed class ExtractionStep : IStep
             await _wordPressCommentExtractor.ExtractAsync(
                 slug,
                 cancellationToken);
+
+            await _imageExtractor.ExtractAsync(
+slug,
+cancellationToken);
         }
 
         _logger.Log();
