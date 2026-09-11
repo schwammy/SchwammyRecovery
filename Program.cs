@@ -27,8 +27,18 @@ using var serviceProvider = services.BuildServiceProvider();
 
 var wayback = new WaybackClient(http, logger);
 
-var waybackRecoveryStep =
-    serviceProvider.GetRequiredService<WaybackRecoveryStep>();
+var discoveryDirectory = Path.Combine(
+    outputDirectory,
+    "discovery");
+
+var crawler = new ArchiveCrawler(
+    wayback,
+    discoveryDirectory,
+    logger);
+
+var discoveryStep = new DiscoveryStep(
+    crawler);
+var waybackRecoveryStep = serviceProvider.GetRequiredService<WaybackRecoveryStep>();
 
 while (true)
 {
@@ -54,12 +64,8 @@ while (true)
     switch (choice)
     {
         case "1":
-            await RunDiscoveryAsync(
-                wayback,
-                outputDirectory,
-                logger);
+            await discoveryStep.RunAsync();
             break;
-
         case "2":
             await waybackRecoveryStep.RunAsync();
             break;
@@ -89,26 +95,6 @@ while (true)
     Console.ReadLine();
 }
 
-static async Task RunDiscoveryAsync(
-    WaybackClient wayback,
-    string outputDirectory,
-    Logger logger)
-{
-    var discoveryDirectory = Path.Combine(
-        outputDirectory,
-        "discovery");
-
-    var crawler = new ArchiveCrawler(
-        wayback,
-        discoveryDirectory,
-        logger);
-
-    var startUrl =
-        "https://web.archive.org/web/20220925020544/" +
-        "http://www.schwammysays.net/2007/03/";
-
-    await crawler.CrawlArchiveAsync(startUrl);
-}
 
 static async Task RunExtractionAsync(
     string outputDirectory,
