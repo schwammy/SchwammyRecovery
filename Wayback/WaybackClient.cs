@@ -52,7 +52,7 @@ public sealed class WaybackClient
         }
     }
 
-    public async Task<IReadOnlyList<WaybackCapture>> GetCapturesAsync(
+    public async Task<IReadOnlyList<WaybackCapture>?> GetCapturesAsync(
         string originalUrl,
         CancellationToken cancellationToken = default)
     {
@@ -71,6 +71,11 @@ public sealed class WaybackClient
         var json = await GetHtmlAsync(
             cdxUrl,
             cancellationToken);
+
+        // null means the CDX request failed. An empty list means
+        // the request succeeded but no matching captures exist.
+        if (json is null)
+            return null;
 
         if (string.IsNullOrWhiteSpace(json))
             return [];

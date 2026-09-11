@@ -86,6 +86,13 @@ public sealed class WaybackRecoveryStep : IStep
             postUrl,
             cancellationToken);
 
+        if (captures is null)
+        {
+            _logger.Log(
+                "  Unable to retrieve HTML captures.");
+            return;
+        }
+
         if (captures.Count == 0)
         {
             _logger.Log("  No HTML captures found.");
@@ -147,7 +154,9 @@ public sealed class WaybackRecoveryStep : IStep
 
         return uri.AbsolutePath
             .Trim('/')
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Split(
+                '/',
+                StringSplitOptions.RemoveEmptyEntries)
             .Last();
     }
 }
