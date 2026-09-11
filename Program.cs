@@ -1,6 +1,7 @@
 using SchwammyRecovery;
 using Microsoft.Extensions.DependencyInjection;
 using SchwammyRecovery.Steps;
+using SchwammyRecovery.Extraction;
 
 var outputDirectory = "output";
 
@@ -23,6 +24,7 @@ services.AddTransient<PostUrlReader>();
 services.AddTransient<WaybackRecoveryStep>();
 services.AddSingleton<WaybackClient>();
 services.AddScoped<IRecoveredPostEnumerationService, RecoveredPostEnumerationService>();
+services.AddScoped<IWordPressPostExtractor, WordPressPostExtractor>();
 
 using var serviceProvider = services.BuildServiceProvider();
 
@@ -40,8 +42,8 @@ var crawler = new ArchiveCrawler(
 var discoveryStep = new DiscoveryStep(
     crawler);
 var waybackRecoveryStep = serviceProvider.GetRequiredService<WaybackRecoveryStep>();
-var extractionStep = new ExtractionStep(
-    serviceProvider.GetRequiredService<IRecoveredPostEnumerationService>(),
+var extractionStep = new ExtractionStep(serviceProvider.GetRequiredService<IRecoveredPostEnumerationService>(),
+    serviceProvider.GetRequiredService<IWordPressPostExtractor>(),
     outputDirectory,
     logger);
 
