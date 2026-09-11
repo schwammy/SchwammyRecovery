@@ -1,21 +1,45 @@
 using System.Text.Json;
 using HtmlAgilityPack;
+using SchwammyRecovery.Steps;
 
-namespace SchwammyRecovery;
+namespace SchwammyRecovery.Steps;
 
-public sealed class PostExtractionStep
+public sealed class ExtractionStep : IStep
 {
     private readonly string _outputDirectory;
     private readonly Logger _logger;
-
-    public PostExtractionStep(
+    private readonly IRecoveredPostEnumerationService _recoveredPostEnumerationService;
+    public ExtractionStep(
+        IRecoveredPostEnumerationService recoveredPostEnumerationService,
         string outputDirectory,
         Logger logger)
     {
+        _recoveredPostEnumerationService = recoveredPostEnumerationService;
         _outputDirectory = outputDirectory;
         _logger = logger;
     }
 
+    public async Task RunAsync(
+            CancellationToken cancellationToken = default)
+    {
+
+        var recoveredDirectory = Path.Combine(
+            _outputDirectory,
+            "recovered");
+
+        var slugs = _recoveredPostEnumerationService
+            .Enumerate(recoveredDirectory);
+
+
+        foreach (var slug in slugs)
+        {
+
+            await ExtractAsync(slug);
+        }
+
+        _logger.Log();
+        _logger.Log("Extraction step complete.");
+    }
     public async Task ExtractAsync(
         string slug,
         CancellationToken cancellationToken = default)
