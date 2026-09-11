@@ -63,13 +63,9 @@ public sealed class WordPressPostExtractor
             extractedDirectory,
             "content.html");
 
-        var commentsPath = Path.Combine(
-            extractedDirectory,
-            "comments.json");
 
         if (File.Exists(postPath) &&
-            File.Exists(contentPath) &&
-            File.Exists(commentsPath))
+            File.Exists(contentPath))
         {
             _logger.Log(
                 $"Skipping {slug}: already extracted.");
@@ -128,9 +124,6 @@ public sealed class WordPressPostExtractor
 
         var contentHtml = GetInnerHtml(contentNode);
 
-        var comments = ExtractComments(
-            document.DocumentNode);
-
         Directory.CreateDirectory(extractedDirectory);
 
         var metadata = new PostMetadata
@@ -159,15 +152,6 @@ public sealed class WordPressPostExtractor
             contentHtml,
             cancellationToken);
 
-        await File.WriteAllTextAsync(
-            commentsPath,
-            JsonSerializer.Serialize(comments, jsonOptions),
-            cancellationToken);
-
-        _logger.Log(
-            $"Extracted {slug}: " +
-            $"title=\"{metadata.Title}\", " +
-            $"comments={comments.Count}.");
     }
 
     private static string? ExtractTitle(
@@ -224,60 +208,8 @@ public sealed class WordPressPostExtractor
                 child => child.OuterHtml));
     }
 
-    private static List<RecoveredComment> ExtractComments(
-    HtmlNode document)
-    {
-        var comments = new List<RecoveredComment>();
-
-        var commentNodes = document.SelectNodes(
-            "//div[@id='comments']" +
-            "//ol[contains(@class, 'commentlist')]" +
-            "/li");
-
-        if (commentNodes is null)
-            return comments;
-
-        foreach (var node in commentNodes)
-        {
-            var classes = node
-                .GetAttributeValue("class", "")
-                .Split(
-                    ' ',
-                    StringSplitOptions.RemoveEmptyEntries);
-
-            var type =
-                classes.Contains("pingback")
-                    ? "pingback"
-                    : classes.Contains("trackback")
-                        ? "trackback"
-                        : "comment";
-
-            if (type is "pingback" or "trackback")
-            {
-                var link = node.SelectSingleNode(
-                    ".//a[contains(@class, 'url')]");
-
-                comments.Add(new RecoveredComment
-                {
-                    Id = node.GetAttributeValue("id", null),
-                    Type = type,
-                    Content = link?.InnerText.Trim(),
-                    Url = link?.GetAttributeValue(
-                        "href",
-                        null)
-                });
-
-                continue;
-            }
-
-            comments.Add(ExtractRegularComment(node));
-        }
-
-        return comments;
-    }
-
     private static string? ExtractParentId(
-        HtmlNode node)
+       HtmlNode node)
     {
         var classes = node
             .GetAttributeValue("class", "")

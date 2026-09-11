@@ -25,6 +25,7 @@ services.AddTransient<WaybackRecoveryStep>();
 services.AddSingleton<WaybackClient>();
 services.AddScoped<IRecoveredPostEnumerationService, RecoveredPostEnumerationService>();
 services.AddScoped<IWordPressPostExtractor, WordPressPostExtractor>();
+services.AddScoped<IWordPressCommentExtractor, WordPressCommentExtractor>();
 
 using var serviceProvider = services.BuildServiceProvider();
 
@@ -44,6 +45,7 @@ var discoveryStep = new DiscoveryStep(
 var waybackRecoveryStep = serviceProvider.GetRequiredService<WaybackRecoveryStep>();
 var extractionStep = new ExtractionStep(serviceProvider.GetRequiredService<IRecoveredPostEnumerationService>(),
     serviceProvider.GetRequiredService<IWordPressPostExtractor>(),
+    serviceProvider.GetRequiredService<IWordPressCommentExtractor>(),
     outputDirectory,
     logger);
 

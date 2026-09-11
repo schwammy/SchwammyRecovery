@@ -28,7 +28,6 @@ public sealed class WaybackClient
                 _logger.Log(
                     "Wayback returned HTTP 429. " +
                     "Stopping to avoid hammering the archive.");
-
                 return null;
             }
 
