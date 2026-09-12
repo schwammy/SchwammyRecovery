@@ -2,6 +2,7 @@ using SchwammyRecovery;
 using Microsoft.Extensions.DependencyInjection;
 using SchwammyRecovery.Steps;
 using SchwammyRecovery.Extraction;
+using SchwammyRecovery.Conversion;
 
 var outputDirectory = "output";
 
@@ -29,6 +30,8 @@ services.AddScoped<IWordPressCommentExtractor, WordPressCommentExtractor>();
 services.AddScoped<IImageExtractor, ImageExtractor>();
 services.AddScoped<IImageDownloader, ImageDownloader>();
 services.AddScoped<IExtractedPostEnumerationService, ExtractedPostEnumerationService>();
+services.AddScoped<IHtmlToMarkdownConverter, HtmlToMarkdownConverter>();
+services.AddTransient<MarkdownConversionStep>();
 
 using var serviceProvider = services.BuildServiceProvider();
 
@@ -62,6 +65,12 @@ var downloadStep = new ImageDownloadStep(
     serviceProvider.GetRequiredService<IExtractedPostEnumerationService>(),
     serviceProvider.GetRequiredService<IImageDownloader>(),
     extractedDirectory,
+    logger);
+
+var conversionStep = new MarkdownConversionStep(
+    serviceProvider.GetRequiredService<IExtractedPostEnumerationService>(),
+    serviceProvider.GetRequiredService<IHtmlToMarkdownConverter>(),
+    outputDirectory,
     logger);
 
 while (true)
@@ -101,6 +110,8 @@ while (true)
             await downloadStep.RunAsync();
             break;
         case "5":
+            await conversionStep.RunAsync();
+            break;
         case "6":
         case "7":
             logger.Log("Not implemented yet.");
