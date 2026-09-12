@@ -496,9 +496,26 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
 
     private static string ToMarkdownPath(string path)
     {
-        return path.Replace(
+        var normalized = path.Replace(
             Path.DirectorySeparatorChar,
             '/');
+
+        var segments = normalized
+            .Split(
+                '/',
+                StringSplitOptions.None)
+            .Select(segment =>
+                segment switch
+                {
+                    "" => string.Empty,
+                    "." => ".",
+                    ".." => "..",
+                    _ => Uri.EscapeDataString(segment)
+                });
+
+        return string.Join(
+            '/',
+            segments);
     }
 
     private static void ConvertList(

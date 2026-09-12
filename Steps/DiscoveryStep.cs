@@ -16,7 +16,7 @@ public sealed class DiscoveryStep : IStep
     {
         var startUrl =
            "https://web.archive.org/web/20220925020544/" +
-           "http://www.schwammysays.net/2007/03/";
+           "http://www.schwammysays.net/2007/04/";
 
         await _crawler.CrawlArchiveAsync(startUrl);
     }
