@@ -1,0 +1,145 @@
+param(
+    [string]$OutputRoot = (Join-Path $PSScriptRoot '..\bin\Debug\net8.0\output')
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+if (-not (Test-Path $OutputRoot)) {
+    throw "Output directory not found: $OutputRoot"
+}
+
+$resolvedOutputRoot = (Resolve-Path $OutputRoot).Path
+
+function Get-Slug {
+    param([string]$Url)
+
+    if ([string]::IsNullOrWhiteSpace($Url)) {
+        return ''
+    }
+
+    try {
+        $uri = [System.Uri]$Url
+    }
+    catch {
+        return ''
+    }
+
+    $path = $uri.AbsolutePath.Trim('/')
+    if ([string]::IsNullOrWhiteSpace($path)) {
+        return ''
+    }
+
+    $segments = $path.Split('/', [System.StringSplitOptions]::RemoveEmptyEntries)
+    return $segments[-1]
+}
+
+Write-Host "Analyzing output from $resolvedOutputRoot"
+Write-Host ''
+
+$postUrlsPath = Join-Path $resolvedOutputRoot 'discovery/post-urls.json'
+$discoveredPosts = @((Get-Content -Raw -Path $postUrlsPath | ConvertFrom-Json))
+
+$recoveredRoot = Join-Path $resolvedOutputRoot 'recovered'
+$recoveredSlugs = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+if (Test-Path $recoveredRoot) {
+    foreach ($directory in Get-ChildItem -Path $recoveredRoot -Directory) {
+        $slug = $directory.Name
+        $sourceExists = Test-Path (Join-Path $directory.FullName 'source.html')
+        $captureExists = Test-Path (Join-Path $directory.FullName 'capture.json')
+
+        if ($sourceExists -and $captureExists) {
+            [void]$recoveredSlugs.Add($slug)
+        }
+    }
+}
+
+$outstandingPosts = New-Object System.Collections.Generic.List[string]
+foreach ($postUrl in $discoveredPosts) {
+    $slug = Get-Slug $postUrl
+    if (-not [string]::IsNullOrWhiteSpace($slug) -and -not $recoveredSlugs.Contains($slug)) {
+        $outstandingPosts.Add($postUrl)
+    }
+}
+
+Write-Host "discovered_count=$($discoveredPosts.Count)"
+Write-Host "recovered_valid_count=$($recoveredSlugs.Count)"
+Write-Host "outstanding_count=$($outstandingPosts.Count)"
+
+if ($outstandingPosts.Count -gt 0) {
+    Write-Host ''
+    Write-Host 'Outstanding posts:'
+    foreach ($postUrl in $outstandingPosts) {
+        Write-Host "  - $postUrl"
+    }
+}
+
+Write-Host ''
+
+$issues = New-Object System.Collections.Generic.List[string]
+$checkedPosts = 0
+
+foreach ($postUrl in $discoveredPosts) {
+    $slug = Get-Slug $postUrl
+    if ([string]::IsNullOrWhiteSpace($slug)) {
+        $issues.Add("Unable to derive slug from $postUrl")
+        continue
+    }
+
+    $checkedPosts++
+
+    $recoveredDirectory = Join-Path $resolvedOutputRoot "recovered/$slug"
+    $extractedDirectory = Join-Path $resolvedOutputRoot "extracted/$slug"
+    $imagesDirectory = Join-Path $resolvedOutputRoot "images/$slug"
+    $markdownFile = Join-Path $resolvedOutputRoot "markdown/$slug/post.md"
+
+    foreach ($artifact in @('source.html', 'capture.json')) {
+        $artifactPath = Join-Path $recoveredDirectory $artifact
+        if (-not (Test-Path $artifactPath)) {
+            $issues.Add(("Missing recovered artifact for {0}: {1}" -f $slug, $artifact))
+        }
+    }
+
+    foreach ($artifact in @('content.html', 'images.json', 'post.json')) {
+        $artifactPath = Join-Path $extractedDirectory $artifact
+        if (-not (Test-Path $artifactPath)) {
+            $issues.Add(("Missing extracted artifact for {0}: {1}" -f $slug, $artifact))
+        }
+    }
+
+    if (-not (Test-Path $imagesDirectory)) {
+        $issues.Add("Missing image directory for $slug")
+    }
+
+    if (-not (Test-Path $markdownFile)) {
+        $issues.Add("Missing Markdown file for $slug")
+    }
+}
+
+$markdownRoot = Join-Path $resolvedOutputRoot 'markdown'
+$markdownFiles = @()
+if (Test-Path $markdownRoot) {
+    $markdownFiles = @(Get-ChildItem -Path $markdownRoot -Recurse -File)
+}
+
+$indexExists = Test-Path (Join-Path $markdownRoot 'index.md')
+Write-Host "markdown_file_count=$($markdownFiles.Count)"
+Write-Host "markdown_index_exists=$indexExists"
+
+if ($indexExists -eq $false) {
+    $issues.Add('Missing markdown/index.md')
+}
+
+Write-Host ''
+
+if ($issues.Count -gt 0) {
+    Write-Host 'Artifact consistency check: FAIL'
+    foreach ($issue in $issues) {
+        Write-Host "  - $issue"
+    }
+    exit 1
+}
+
+Write-Host 'Artifact consistency check: PASS'
+Write-Host "Checked posts: $checkedPosts"
