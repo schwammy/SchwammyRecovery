@@ -37,6 +37,8 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
 - If you change the archive month, delete the existing `output` tree first so old discovery/extraction/image/Markdown artifacts do not contaminate the new run.
 - Step 5 intentionally skips existing Markdown files and only recreates them when the file is missing.
 - Local image paths in generated Markdown must be URL-encoded for filenames with spaces or other special characters so VS Code Markdown preview can load them.
+- Keep interfaces and their primary implementations together in the same file/folder unless the interface intentionally has multiple implementations (for example `IStep`, which is implemented by several step classes).
+- When adding project conventions, update `PROJECT_NOTES.md` so the rules are preserved across future changes.
 
 ## Current verified behavior
 - Markdown preview now works for local images when generated paths are encoded correctly.

@@ -9,6 +9,7 @@ public sealed class ArchiveCrawler
     private readonly string _output;
     private readonly HashSet<string> _visitedArchivePages = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _postUrls = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, PostSourceMapEntry> _postSources = new(StringComparer.OrdinalIgnoreCase);
     private readonly Logger _logger;
     public ArchiveCrawler(WaybackClient client, string output, Logger logger)
     {
@@ -24,8 +25,16 @@ public sealed class ArchiveCrawler
     {
         _postUrls.Clear();
         _visitedArchivePages.Clear();
+        _postSources.Clear();
 
         var existingPostUrls = await LoadExistingPostUrlsAsync();
+        var existingPostSources = await LoadExistingPostSourceMapAsync();
+
+        foreach (var kvp in existingPostSources)
+        {
+            _postSources[kvp.Key] = kvp.Value;
+        }
+
         var existingCount = existingPostUrls.Count;
         var discoveredThisRun = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -41,6 +50,8 @@ public sealed class ArchiveCrawler
         await File.WriteAllTextAsync(
             Path.Combine(_output, "post-urls.json"),
             JsonSerializer.Serialize(posts, new JsonSerializerOptions { WriteIndented = true }));
+
+        await SavePostSourceMapAsync();
 
         var alreadyExistingCount = discoveredThisRun
             .Count(url => existingPostUrls.Contains(url));
@@ -89,6 +100,42 @@ public sealed class ArchiveCrawler
         }
 
         return existingPostUrls;
+    }
+
+    private async Task<Dictionary<string, PostSourceMapEntry>> LoadExistingPostSourceMapAsync()
+    {
+        var path = Path.Combine(_output, "post-source-map.json");
+
+        if (!File.Exists(path))
+            return new Dictionary<string, PostSourceMapEntry>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            var json = await File.ReadAllTextAsync(path);
+
+            if (string.IsNullOrWhiteSpace(json))
+                return new Dictionary<string, PostSourceMapEntry>(StringComparer.OrdinalIgnoreCase);
+
+            var existing = JsonSerializer.Deserialize<Dictionary<string, PostSourceMapEntry>>(json);
+
+            return existing ?? new Dictionary<string, PostSourceMapEntry>(StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            _logger.Log($"  WARNING: Could not load existing post-source-map.json: {ex.Message}");
+            return new Dictionary<string, PostSourceMapEntry>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    private async Task SavePostSourceMapAsync()
+    {
+        var path = Path.Combine(_output, "post-source-map.json");
+
+        var json = JsonSerializer.Serialize(
+            _postSources,
+            new JsonSerializerOptions { WriteIndented = true });
+
+        await File.WriteAllTextAsync(path, json);
     }
 
     private async Task CrawlArchivePageAsync(
@@ -161,6 +208,12 @@ public sealed class ArchiveCrawler
 
             discoveredThisRun.Add(original);
 
+            _postSources[original] = new PostSourceMapEntry
+            {
+                PostUrl = original,
+                ArchivePageUrl = archiveUrl
+            };
+
             if (_postUrls.Add(original))
             {
                 _logger.Log(
@@ -179,6 +232,51 @@ public sealed class ArchiveCrawler
         var uri = new Uri(original);
 
         return uri.AbsolutePath.Trim('/');
+    }
+
+    private async Task SaveArchivePageAsync(
+        string archiveUrl,
+        string html)
+    {
+        var targetPath = GetArchivePageStoragePath(archiveUrl);
+        var targetDirectory = Path.GetDirectoryName(targetPath);
+
+        if (!string.IsNullOrWhiteSpace(targetDirectory))
+        {
+            Directory.CreateDirectory(targetDirectory);
+        }
+
+        await File.WriteAllTextAsync(targetPath, html);
+    }
+
+    private string GetArchivePageStoragePath(string archiveUrl)
+    {
+        var relativePath = GetArchivePageRelativePath(archiveUrl);
+        return Path.Combine(_output, relativePath);
+    }
+
+    private static string GetArchivePageRelativePath(string archiveUrl)
+    {
+        var original = ExtractOriginalUrl(archiveUrl);
+
+        if (original is null)
+            return Path.Combine("archive-pages", "unknown.html");
+
+        var uri = new Uri(original);
+        var path = uri.AbsolutePath.Trim('/');
+
+        var segments = string.IsNullOrWhiteSpace(path)
+            ? []
+            : path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+        var relativePath = "archive-pages";
+
+        foreach (var segment in segments)
+        {
+            relativePath = Path.Combine(relativePath, segment);
+        }
+
+        return Path.Combine(relativePath, "index.html");
     }
     private static bool LooksLikeArchivePagination(string url)
     {
@@ -278,6 +376,12 @@ public sealed class ArchiveCrawler
                int.TryParse(bParts[0], out var by) &&
                int.TryParse(bParts[1], out var bm) &&
                ay == by && am == bm;
+    }
+
+    private sealed class PostSourceMapEntry
+    {
+        public string PostUrl { get; set; } = string.Empty;
+        public string ArchivePageUrl { get; set; } = string.Empty;
     }
 
     private static bool IsWaybackUrl(string url) =>

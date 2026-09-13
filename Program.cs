@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SchwammyRecovery.Steps;
 using SchwammyRecovery.Extraction;
 using SchwammyRecovery.Conversion;
+using SchwammyRecovery.Recovery;
 
 var outputDirectory = "output";
 
@@ -22,6 +23,7 @@ services.AddSingleton(outputDirectory);
 services.AddSingleton(logger);
 services.AddSingleton(http);
 services.AddTransient<PostUrlReader>();
+services.AddTransient<IWaybackRecoveryService, WaybackRecoveryService>();
 services.AddTransient<WaybackRecoveryStep>();
 services.AddSingleton<WaybackClient>();
 services.AddScoped<IRecoveredPostEnumerationService, RecoveredPostEnumerationService>();

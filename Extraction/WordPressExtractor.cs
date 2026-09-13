@@ -1,5 +1,6 @@
 using System.Text.Json;
 using HtmlAgilityPack;
+using SchwammyRecovery.Recovery;
 
 namespace SchwammyRecovery.Extraction;
 
@@ -54,6 +55,14 @@ public sealed class WordPressPostExtractor
             _outputDirectory,
             "extracted",
             slug);
+
+        var provenancePath = Path.Combine(
+            recoveredDirectory,
+            "provenance.json");
+
+        var provenance = await ReadProvenanceAsync(
+            provenancePath,
+            cancellationToken);
 
         var postPath = Path.Combine(
             extractedDirectory,
@@ -134,7 +143,8 @@ public sealed class WordPressPostExtractor
             Author = author,
             Categories = categories,
             SourceUrl = capture.OriginalUrl,
-            Source = capture
+            Source = capture,
+            Provenance = provenance
         };
 
         var jsonOptions = new JsonSerializerOptions
@@ -198,6 +208,20 @@ public sealed class WordPressPostExtractor
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Distinct()
             .ToList();
+    }
+
+    private static async Task<RecoveryProvenance?> ReadProvenanceAsync(
+        string provenancePath,
+        CancellationToken cancellationToken)
+    {
+        if (!File.Exists(provenancePath))
+            return null;
+
+        var json = await File.ReadAllTextAsync(
+            provenancePath,
+            cancellationToken);
+
+        return JsonSerializer.Deserialize<RecoveryProvenance>(json);
     }
 
     private static string GetInnerHtml(

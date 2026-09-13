@@ -50,6 +50,10 @@ public sealed class MarkdownConversionStep
                 cancellationToken);
         }
 
+        await WriteTableOfContentsAsync(
+            slugs,
+            cancellationToken);
+
         _logger.Log("Markdown conversion complete.");
     }
 
@@ -130,6 +134,62 @@ public sealed class MarkdownConversionStep
 
         _logger.Log(
             $"  Created: {markdownPath}");
+    }
+
+    private async Task WriteTableOfContentsAsync(
+        IReadOnlyList<string> slugs,
+        CancellationToken cancellationToken)
+    {
+        var markdownDirectory = Path.Combine(
+            _outputDirectory,
+            "markdown");
+
+        var tocPath = Path.Combine(
+            markdownDirectory,
+            "index.md");
+
+        Directory.CreateDirectory(markdownDirectory);
+
+        var lines = new List<string>
+        {
+            "# Table of Contents",
+            string.Empty,
+            "- [Overview](../README.md)",
+            string.Empty
+        };
+
+        foreach (var slug in slugs)
+        {
+            var markdownPath = Path.Combine(
+                markdownDirectory,
+                slug,
+                "post.md");
+
+            if (!File.Exists(markdownPath))
+            {
+                continue;
+            }
+
+            lines.Add(
+                $"- [{slug}]({slug}/post.md)");
+        }
+
+        if (lines.Count == 3)
+        {
+            lines.Add("No posts have been converted to Markdown yet.");
+        }
+
+        var content = string.Join(
+            Environment.NewLine,
+            lines);
+
+        await File.WriteAllTextAsync(
+            tocPath,
+            content + Environment.NewLine,
+            cancellationToken);
+
+        _logger.Log(
+            $"  Created: {tocPath}");
     }
 
     private static async Task<IReadOnlyList<RecoveredImage>> ReadImagesAsync(

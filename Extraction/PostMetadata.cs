@@ -1,3 +1,5 @@
+using SchwammyRecovery.Recovery;
+
 namespace SchwammyRecovery;
 
 public sealed class PostMetadata
@@ -9,4 +11,5 @@ public sealed class PostMetadata
     public List<string> Categories { get; init; } = [];
     public required string SourceUrl { get; init; }
     public required WaybackCapture Source { get; init; }
+    public RecoveryProvenance? Provenance { get; init; }
 }
