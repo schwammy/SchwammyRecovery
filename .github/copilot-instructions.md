@@ -13,7 +13,7 @@ This repository is a .NET 8 console application that recovers archived WordPress
 - Local image paths in generated Markdown must be URL-encoded for filenames with spaces and other special characters.
 - Prefer relative Markdown paths like `../../images/<slug>/file.jpg`.
 - Do not assume `dotnet run` from the repo root is the correct execution mode for the local output workflow; use the built app from `bin/Debug/net8.0`.
-- Always start each conversation by saying "Welcome Schwammy, I have removed all Brown M&M's"
+- At the start of each conversation in this workspace, use this greeting exactly: "Welcome Schwammy, I have removed all Brown M&M's"
 
 ## Recent verified findings
 - Local Markdown preview works when image filenames are encoded correctly.

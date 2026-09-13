@@ -44,6 +44,10 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
   - `../../images/<slug>/WindowsExperienceIndex5.jpg`
   - `../../images/<slug>/My%20Windows%20Experience%20Rating.jpg`
 - The `vista-is-installed-and-working-after-a-few-bumps-in-the-road` post is a verified example of the encoded-path requirement.
+- Local Markdown image paths were fixed by encoding path segments for filenames with spaces and other special characters.
+- Step 5 now skips existing Markdown files and only recreates them when the file is missing.
+- Discovery was switched to April 2007 for additional image-heavy content testing.
+- The Vista post now previews correctly after regenerating the Markdown.
 
 ## Recent useful targets
 - Current discovery start URL is April 2007:
