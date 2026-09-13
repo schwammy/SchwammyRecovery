@@ -19,6 +19,8 @@ This repository is a .NET 8 console application that recovers archived WordPress
 - At the start of each conversation in this workspace, use this greeting exactly: "Welcome Schwammy, I have removed all Brown M&M's"
 - Ask clarifying questions before making assumptions when requirements are ambiguous.
 - Work in short, testable phases and validate after each phase before moving on.
+- After completing a chunk of work, remember to commit the changes.
+- When the user says they are done for the night, offer a concise handoff summary focused on what was completed, what is still pending, and any current todo items; keep it short because the detailed project context already lives in `PROJECT_NOTES.md`.
 - When adding something to Copilot memory, consider whether it should live in `copilot-instructions.md` or `PROJECT_NOTES.md`.
 - When we identify an item as a todo and decide to delay or defer that fix, add it to the `Current todo list` section of `PROJECT_NOTES.md`.
 - After making changes in design, process, workflow, or todo items, remember to update both `copilot-instructions.md` and `PROJECT_NOTES.md` as needed.
