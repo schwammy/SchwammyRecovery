@@ -13,45 +13,50 @@ The recovery process is divided into independent, repeatable steps:
 1. **Discover post URLs**
 2. **Recover Wayback HTML**
 3. **Extract post content**
-4. **Clean / normalize extracted content**
-5. **Recover images**
-6. **Convert to Markdown**
-7. **Review recovered posts**
-8. **Export to Ghost**
+4. **Recover images**
+5. **Convert to Markdown**
+6. **Review outstanding posts**
+7. **Export to Ghost**
 
 Each step produces files on disk that become the input to the next step. This makes the recovery process inspectable and allows individual steps to be rerun without repeating the entire process.
 
-The original archived HTML is preserved so that extracted and cleaned content can always be traced back to the source.
+The original archived HTML is preserved so that extracted content can always be traced back to the source.
 
 ## Output Structure
 
-Recovery data is stored under `output/`:
+Recovery data is stored under `output/` in the built app directory, typically at `bin/Debug/net8.0/output`:
 
 ```text
 output/
+├── archive-pages/
+│   └── <year>/
+│       └── <month>/
+│           └── ...
 ├── discovery/
+│   ├── post-source-map.json
 │   └── post-urls.json
 ├── recovered/
 │   └── <slug>/
 │       ├── capture.json
-│       └── source.html
+│       ├── source.html
+│       └── provenance.json
 ├── extracted/
 │   └── <slug>/
-│       ├── post.json
 │       ├── content.html
-│       └── comments.json
-├── cleaned/
-│   └── <slug>/
+│       ├── images.json
 │       ├── post.json
-│       ├── content.html
 │       └── comments.json
 ├── images/
 │   └── <slug>/
 │       ├── image-001.jpg
 │       └── image-002.png
-└── markdown/
-    └── <slug>/
-        └── post.md
+├── markdown/
+│   ├── index.md
+│   └── <slug>/
+│       └── post.md
+├── logs/
+│   └── ...
+└── recovered/
 ```
 
 `output/` is generated data and is not part of the application's source code.
@@ -86,25 +91,29 @@ Where practical, source-specific behavior is kept separate from the pipeline its
 
 ## Current Status
 
-The following stages are currently implemented:
+The following stages are currently implemented and validated in the local output tree:
 
 * Post URL discovery
-* Wayback capture recovery
+* Wayback capture recovery, including archive-page fallback
 * Post and comment extraction
+* Image recovery and local download
+* Markdown conversion with generated `index.md`
+* Outstanding-post review via the interactive menu
 
-The remaining stages will be implemented incrementally as the recovered content is inspected and additional requirements become clear.
+The remaining stage is Ghost export, which is intentionally not implemented yet.
 
 ## Running the Application
 
 The application is a .NET console application.
 
-Run it from the project directory:
+For the local preview workflow, build once and then run the app from `bin/Debug/net8.0` so that it uses the existing `output/` tree under that directory:
 
 ```text
-dotnet run
+dotnet build
+bin/Debug/net8.0/SchwammyRecovery.exe
 ```
 
-The application presents a menu for selecting a recovery step.
+The application presents a menu for selecting a recovery step and writes its generated artifacts under `bin/Debug/net8.0/output`.
 
 ## Important Notes
 
@@ -113,3 +122,5 @@ The Wayback Machine is not a database backup. Archived pages may be incomplete, 
 A successful recovery therefore does not necessarily mean that every part of the original website has been recovered.
 
 The goal of this project is to preserve as much of the original content as possible while maintaining a clear chain from the archived source to the final recovered content.
+
+For Markdown preview, local image paths are URL-encoded when needed so that filenames with spaces or other special characters render correctly in VS Code preview or comparable Markdown viewers.
