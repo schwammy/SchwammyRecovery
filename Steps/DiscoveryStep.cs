@@ -5,6 +5,10 @@ namespace SchwammyRecovery.Steps;
 
 public sealed class DiscoveryStep : IStep
 {
+    private const string BaseUrl =
+        "https://web.archive.org/web/20220925020544/" +
+        "http://www.schwammysays.net/";
+
     private readonly ArchiveCrawler _crawler;
 
     public DiscoveryStep(ArchiveCrawler crawler)
@@ -12,12 +16,18 @@ public sealed class DiscoveryStep : IStep
         _crawler = crawler;
     }
 
-    public async Task RunAsync(CancellationToken cancellationToken = default)
+    public Task RunAsync(CancellationToken cancellationToken = default)
     {
-        var startUrl =
-           "https://web.archive.org/web/20220925020544/" +
-           "http://www.schwammysays.net/2007/04/";
+        return RunAsync(2007, 4, cancellationToken);
+    }
 
-        await _crawler.CrawlArchiveAsync(startUrl);
+    public async Task RunAsync(
+        int year,
+        int month,
+        CancellationToken cancellationToken = default)
+    {
+        var startUrl = $"{BaseUrl}{year:0000}/{month:00}/";
+
+        await _crawler.CrawlArchiveAsync(startUrl, cancellationToken);
     }
 }

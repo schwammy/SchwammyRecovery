@@ -73,6 +73,83 @@ var conversionStep = new MarkdownConversionStep(
     outputDirectory,
     logger);
 
+async Task ReviewOutstandingPostsAsync()
+{
+    var postUrlPath = Path.Combine(
+        outputDirectory,
+        "discovery",
+        "post-urls.json");
+
+    var recoveredDirectory = Path.Combine(
+        outputDirectory,
+        "recovered");
+
+    logger.Log();
+    logger.Log("Reviewing outstanding posts...");
+
+    if (!File.Exists(postUrlPath))
+    {
+        logger.Log($"  ERROR: {postUrlPath} was not found.");
+        return;
+    }
+
+    var discoveredPosts = await new PostUrlReader().ReadAsync(postUrlPath);
+
+    var recoveredSlugs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    if (Directory.Exists(recoveredDirectory))
+    {
+        foreach (var postDirectory in Directory.EnumerateDirectories(recoveredDirectory))
+        {
+            var slug = Path.GetFileName(postDirectory);
+
+            if (string.IsNullOrWhiteSpace(slug))
+                continue;
+
+            var sourcePath = Path.Combine(postDirectory, "source.html");
+            var capturePath = Path.Combine(postDirectory, "capture.json");
+
+            if (File.Exists(sourcePath) && File.Exists(capturePath))
+            {
+                recoveredSlugs.Add(slug);
+            }
+        }
+    }
+
+    var outstandingPosts = discoveredPosts
+        .Where(postUrl => !recoveredSlugs.Contains(GetSlug(postUrl)))
+        .ToList();
+
+    logger.Log($"  Discovered: {discoveredPosts.Count}");
+    logger.Log($"  Recovered: {recoveredSlugs.Count}");
+    logger.Log($"  Outstanding: {outstandingPosts.Count}");
+
+    if (outstandingPosts.Count == 0)
+    {
+        logger.Log("  All discovered posts appear to be recovered.");
+        return;
+    }
+
+    logger.Log("  Outstanding posts:");
+
+    foreach (var outstandingPost in outstandingPosts)
+    {
+        logger.Log($"    - {outstandingPost}");
+    }
+}
+
+static string GetSlug(string postUrl)
+{
+    var uri = new Uri(postUrl);
+
+    return uri.AbsolutePath
+        .Trim('/')
+        .Split(
+            '/',
+            StringSplitOptions.RemoveEmptyEntries)
+        .Last();
+}
+
 while (true)
 {
     logger.Log("Schwammy Recovery");
@@ -83,7 +160,7 @@ while (true)
     logger.Log("3. Extract post content");
     logger.Log("4. Recover images");
     logger.Log("5. Convert to Markdown");
-    logger.Log("6. Review recovered posts");
+    logger.Log("6. Review outstanding posts");
     logger.Log("7. Export to Ghost");
     logger.Log("Q. Quit");
     logger.Log();
@@ -97,7 +174,28 @@ while (true)
     switch (choice)
     {
         case "1":
-            await discoveryStep.RunAsync();
+            logger.Log("Enter the archive year (leave blank to use the default 2007):");
+            var yearText = Console.ReadLine();
+
+            logger.Log("Enter the archive month (leave blank to use the default 04):");
+            var monthText = Console.ReadLine();
+
+            if (string.IsNullOrWhiteSpace(yearText) && string.IsNullOrWhiteSpace(monthText))
+            {
+                await discoveryStep.RunAsync();
+            }
+            else
+            {
+                var year = int.TryParse(yearText, out var parsedYear)
+                    ? parsedYear
+                    : 2007;
+
+                var month = int.TryParse(monthText, out var parsedMonth)
+                    ? parsedMonth
+                    : 4;
+
+                await discoveryStep.RunAsync(year, month);
+            }
             break;
         case "2":
             await waybackRecoveryStep.RunAsync();
@@ -113,6 +211,9 @@ while (true)
             await conversionStep.RunAsync();
             break;
         case "6":
+            await ReviewOutstandingPostsAsync();
+            break;
+
         case "7":
             logger.Log("Not implemented yet.");
             break;

@@ -18,12 +18,21 @@ public sealed class ArchiveCrawler
         Directory.CreateDirectory(_output);
     }
 
-    public async Task CrawlArchiveAsync(string startUrl)
+    public async Task CrawlArchiveAsync(
+        string startUrl,
+        CancellationToken cancellationToken = default)
     {
+        _postUrls.Clear();
+        _visitedArchivePages.Clear();
+
+        var existingPostUrls = await LoadExistingPostUrlsAsync();
+        var existingCount = existingPostUrls.Count;
+        var discoveredThisRun = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         _logger.Log($"Starting at:\n  {startUrl}\n");
 
         // Phase 1: crawl the supplied monthly archive and its pagination.
-        await CrawlArchivePageAsync(startUrl);
+        await CrawlArchivePageAsync(startUrl, discoveredThisRun, cancellationToken);
 
         var posts = _postUrls
             .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
@@ -33,11 +42,62 @@ public sealed class ArchiveCrawler
             Path.Combine(_output, "post-urls.json"),
             JsonSerializer.Serialize(posts, new JsonSerializerOptions { WriteIndented = true }));
 
-        _logger.Log($"\nDiscovered {posts.Length} unique post URLs.");
+        var alreadyExistingCount = discoveredThisRun
+            .Count(url => existingPostUrls.Contains(url));
+
+        var addedCount = discoveredThisRun.Count - alreadyExistingCount;
+
+        _logger.Log(
+            $"\nThis crawl found {discoveredThisRun.Count} URL(s). " +
+            $"Already in post-urls.json: {alreadyExistingCount}. " +
+            $"Added: {addedCount}. " +
+            $"Total unique URLs now in file: {posts.Length}.");
     }
 
-    private async Task CrawlArchivePageAsync(string archiveUrl)
+    private async Task<HashSet<string>> LoadExistingPostUrlsAsync()
     {
+        var path = Path.Combine(_output, "post-urls.json");
+        var existingPostUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!File.Exists(path))
+            return existingPostUrls;
+
+        try
+        {
+            var json = await File.ReadAllTextAsync(path);
+
+            if (string.IsNullOrWhiteSpace(json))
+                return existingPostUrls;
+
+            var existing = JsonSerializer.Deserialize<string[]>(json);
+
+            if (existing is null)
+                return existingPostUrls;
+
+            foreach (var postUrl in existing)
+            {
+                if (!string.IsNullOrWhiteSpace(postUrl))
+                {
+                    existingPostUrls.Add(postUrl);
+                    _postUrls.Add(postUrl);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Log($"  WARNING: Could not load existing post-urls.json: {ex.Message}");
+        }
+
+        return existingPostUrls;
+    }
+
+    private async Task CrawlArchivePageAsync(
+        string archiveUrl,
+        HashSet<string> discoveredThisRun,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
         if (!_visitedArchivePages.Add(archiveUrl))
             return;
 
@@ -86,7 +146,7 @@ public sealed class ArchiveCrawler
                     _logger.Log(
                         $"  Following pagination: {absolute}");
 
-                    await CrawlArchivePageAsync(absolute);
+                    await CrawlArchivePageAsync(absolute, discoveredThisRun, cancellationToken);
                 }
 
                 continue;
@@ -98,6 +158,8 @@ public sealed class ArchiveCrawler
 
             if (!LooksLikePostUrl(original))
                 continue;
+
+            discoveredThisRun.Add(original);
 
             if (_postUrls.Add(original))
             {
