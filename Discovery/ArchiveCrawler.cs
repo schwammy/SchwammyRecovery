@@ -87,7 +87,9 @@ public sealed class ArchiveCrawler
 
             foreach (var postUrl in existing)
             {
-                if (!string.IsNullOrWhiteSpace(postUrl))
+                if (!string.IsNullOrWhiteSpace(postUrl) &&
+                    LooksLikePostUrl(postUrl) &&
+                    !LooksLikeLegacyNonPostUrl(postUrl))
                 {
                     existingPostUrls.Add(postUrl);
                     _postUrls.Add(postUrl);
@@ -145,6 +147,8 @@ public sealed class ArchiveCrawler
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        archiveUrl = NormalizeArchiveUrl(archiveUrl);
+
         if (!_visitedArchivePages.Add(archiveUrl))
             return;
 
@@ -177,6 +181,8 @@ public sealed class ArchiveCrawler
             if (absolute is null)
                 continue;
 
+            absolute = NormalizeArchiveUrl(absolute);
+
             if (!IsWaybackUrl(absolute))
                 continue;
 
@@ -204,6 +210,9 @@ public sealed class ArchiveCrawler
                 continue;
 
             if (!LooksLikePostUrl(original))
+                continue;
+
+            if (!IsPostPermalink(link))
                 continue;
 
             discoveredThisRun.Add(original);
@@ -321,6 +330,10 @@ public sealed class ArchiveCrawler
         if (first.Equals("wp-login.php", StringComparison.OrdinalIgnoreCase))
             return false;
 
+        // Legacy category pages can look like post URLs but are not posts.
+        if (path.Contains(",category,", StringComparison.OrdinalIgnoreCase))
+            return false;
+
         // WordPress date archives:
         //   /2007/03/
         //   /2007/03/page/2/
@@ -355,6 +368,33 @@ public sealed class ArchiveCrawler
         }
 
         return true;
+    }
+
+    private static bool IsPostPermalink(HtmlNode link)
+    {
+        var rel = link.GetAttributeValue("rel", string.Empty);
+
+        if (rel.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Contains("bookmark", StringComparer.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return link.SelectSingleNode(
+                   "ancestor::*[self::h1 or self::h2 or self::h3][contains(concat(' ', normalize-space(@class), ' '), ' entry-title ')]")
+               is not null;
+    }
+
+    private static bool LooksLikeLegacyNonPostUrl(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return true;
+
+        var path = uri.AbsolutePath;
+
+        return path.EndsWith(".avi", StringComparison.OrdinalIgnoreCase) ||
+               path.EndsWith(".aspx", StringComparison.OrdinalIgnoreCase) ||
+               path.Contains(",category,", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool SameOriginalMonth(string current, string candidate)
@@ -437,5 +477,36 @@ public sealed class ArchiveCrawler
             return result.ToString();
 
         return null;
+    }
+
+    private static string NormalizeArchiveUrl(string url)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            !uri.Host.Equals("web.archive.org", StringComparison.OrdinalIgnoreCase))
+        {
+            return url;
+        }
+
+        var normalized = url.Split('#')[0];
+        const string marker = "/web/";
+        var markerIndex = normalized.IndexOf(
+            marker,
+            StringComparison.OrdinalIgnoreCase);
+
+        if (markerIndex < 0)
+            return normalized;
+
+        var timestampStart = markerIndex + marker.Length;
+        var timestampEnd = normalized.IndexOf('/', timestampStart);
+
+        if (timestampEnd < 0)
+            return normalized;
+
+        var timestamp = normalized[timestampStart..timestampEnd]
+            .Replace("*", string.Empty, StringComparison.Ordinal);
+
+        return normalized[..timestampStart] +
+               timestamp +
+               normalized[timestampEnd..];
     }
 }

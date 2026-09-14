@@ -386,7 +386,9 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
         builder.Append('[');
         builder.Append(text);
         builder.Append("](");
-        builder.Append(href.Trim());
+        builder.Append(
+            NormalizePublishedUrl(
+                href.Trim()));
         builder.Append(')');
     }
 
@@ -466,7 +468,39 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
             }
         }
 
-        return sourceUrl;
+        return NormalizePublishedUrl(sourceUrl);
+    }
+
+    private static string NormalizePublishedUrl(string url)
+    {
+        url = WebUtility.HtmlDecode(url.Trim());
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            !uri.Host.Equals("web.archive.org", StringComparison.OrdinalIgnoreCase))
+        {
+            return url;
+        }
+
+        const string marker = "/web/";
+        var markerIndex = url.IndexOf(
+            marker,
+            StringComparison.OrdinalIgnoreCase);
+
+        if (markerIndex < 0)
+            return url;
+
+        var remainder = url[(markerIndex + marker.Length)..];
+        var separatorIndex = remainder.IndexOf('/');
+
+        if (separatorIndex < 0)
+            return url;
+
+        var originalUrl = remainder[(separatorIndex + 1)..];
+
+        return originalUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+               originalUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            ? Uri.UnescapeDataString(originalUrl)
+            : url;
     }
 
     private static string? ResolveLocalImagePath(
@@ -652,30 +686,44 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
 
     private static string GetVisibleText(HtmlNode node)
     {
-        return NormalizeText(
+        return NormalizeInlineText(
             WebUtility
-                .HtmlDecode(node.InnerText));
+                .HtmlDecode(node.InnerText))
+            .Trim();
     }
 
     private static void AppendText(
         StringBuilder builder,
         string text)
     {
-        text = NormalizeText(
+        text = NormalizeInlineText(
             WebUtility
                 .HtmlDecode(text));
 
         if (string.IsNullOrWhiteSpace(text))
+        {
+            if (builder.Length > 0 &&
+                builder[^1] != '\n')
+            {
+                builder.Append(' ');
+            }
+
             return;
+        }
 
         builder.Append(text);
     }
 
-    private static string NormalizeText(string text)
+    private static string NormalizeInlineText(string text)
     {
         text = text.Replace('\u00A0', ' ');
 
-        return text.Trim();
+        var normalized = System.Text.RegularExpressions.Regex.Replace(
+            text,
+            @"\s+",
+            " ");
+
+        return normalized;
     }
 
     private static void AppendParagraphBreak(

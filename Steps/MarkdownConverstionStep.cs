@@ -47,9 +47,15 @@ public sealed class MarkdownConversionStep : IStep
             cancellationToken.ThrowIfCancellationRequested();
 
             var existingEntry = await _postStatusStore.GetEntryAsync(slug, cancellationToken);
+            var markdownPath = Path.Combine(
+                _outputDirectory,
+                "markdown",
+                slug,
+                "post.md");
 
             if (existingEntry is not null &&
-                string.Equals(existingEntry.MarkdownStatus, "S", StringComparison.OrdinalIgnoreCase))
+                string.Equals(existingEntry.MarkdownStatus, "S", StringComparison.OrdinalIgnoreCase) &&
+                File.Exists(markdownPath))
             {
                 _logger.Log($"  SKIP: Markdown already converted for {slug}.");
                 continue;
