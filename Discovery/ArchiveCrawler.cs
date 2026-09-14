@@ -59,9 +59,9 @@ public sealed class ArchiveCrawler
         var addedCount = discoveredThisRun.Count - alreadyExistingCount;
 
         _logger.Log(
-            $"\nThis crawl found {discoveredThisRun.Count} URL(s). " +
-            $"Already in post-urls.json: {alreadyExistingCount}. " +
-            $"Added: {addedCount}. " +
+            $"\nThis crawl found {discoveredThisRun.Count} URL(s) in the target month. " +
+            $"Already present in the cumulative post-urls.json: {alreadyExistingCount}. " +
+            $"Newly added this run: {addedCount}. " +
             $"Total unique URLs now in file: {posts.Length}.");
     }
 

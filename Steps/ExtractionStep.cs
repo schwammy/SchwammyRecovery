@@ -1,4 +1,5 @@
 using SchwammyRecovery.Extraction;
+using SchwammyRecovery.Status;
 
 namespace SchwammyRecovery.Steps;
 
@@ -10,6 +11,7 @@ public sealed class ExtractionStep : IStep
     private readonly IWordPressPostExtractor _wordPressPostExtractor;
     private readonly IWordPressCommentExtractor _wordPressCommentExtractor;
     private readonly IImageExtractor _imageExtractor;
+    private readonly IPostStatusStore _postStatusStore;
 
     public ExtractionStep(
         IRecoveredPostEnumerationService recoveredPostEnumerationService,
@@ -17,7 +19,8 @@ public sealed class ExtractionStep : IStep
         IWordPressCommentExtractor wordPressCommentExtractor,
         IImageExtractor imageExtractor,
         string outputDirectory,
-        Logger logger)
+        Logger logger,
+        IPostStatusStore postStatusStore)
     {
         _recoveredPostEnumerationService = recoveredPostEnumerationService;
         _wordPressPostExtractor = wordPressPostExtractor;
@@ -25,6 +28,7 @@ public sealed class ExtractionStep : IStep
         _outputDirectory = outputDirectory;
         _imageExtractor = imageExtractor;
         _logger = logger;
+        _postStatusStore = postStatusStore;
     }
 
     public async Task RunAsync(
@@ -39,17 +43,46 @@ public sealed class ExtractionStep : IStep
 
         foreach (var slug in slugs)
         {
-            await _wordPressPostExtractor.ExtractAsync(
-                slug,
-                cancellationToken);
+            var existingEntry = await _postStatusStore.GetEntryAsync(slug, cancellationToken);
 
-            await _wordPressCommentExtractor.ExtractAsync(
-                slug,
-                cancellationToken);
+            if (existingEntry is not null &&
+                string.Equals(existingEntry.ExtractedStatus, "S", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.Log($"  SKIP: Extraction already completed for {slug}.");
+                continue;
+            }
 
-            await _imageExtractor.ExtractAsync(
-slug,
-cancellationToken);
+            try
+            {
+                await _wordPressPostExtractor.ExtractAsync(
+                    slug,
+                    cancellationToken);
+
+                await _wordPressCommentExtractor.ExtractAsync(
+                    slug,
+                    cancellationToken);
+
+                await _imageExtractor.ExtractAsync(
+                    slug,
+                    cancellationToken);
+
+                await _postStatusStore.UpdateStepStatusAsync(
+                    slug,
+                    nameof(PostStatusEntry.ExtractedStatus),
+                    "S",
+                    cancellationToken: cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.Log($"  ERROR: Failed extracting {slug}: {ex.Message}");
+
+                await _postStatusStore.UpdateStepStatusAsync(
+                    slug,
+                    nameof(PostStatusEntry.ExtractedStatus),
+                    "F",
+                    ex.Message,
+                    cancellationToken);
+            }
         }
 
         _logger.Log();

@@ -4,6 +4,7 @@ using SchwammyRecovery.Steps;
 using SchwammyRecovery.Extraction;
 using SchwammyRecovery.Conversion;
 using SchwammyRecovery.Recovery;
+using SchwammyRecovery.Status;
 
 var outputDirectory = "output";
 
@@ -22,9 +23,12 @@ var services = new ServiceCollection();
 services.AddSingleton(outputDirectory);
 services.AddSingleton(logger);
 services.AddSingleton(http);
+services.AddSingleton<IPostStatusStore>(new PostStatusStore(outputDirectory));
 services.AddTransient<PostUrlReader>();
+services.AddTransient<IOutstandingPostsReviewService, OutstandingPostsReviewService>();
 services.AddTransient<IWaybackRecoveryService, WaybackRecoveryService>();
 services.AddTransient<WaybackRecoveryStep>();
+services.AddTransient<ReviewOutstandingPostsStep>();
 services.AddSingleton<WaybackClient>();
 services.AddScoped<IRecoveredPostEnumerationService, RecoveredPostEnumerationService>();
 services.AddScoped<IWordPressPostExtractor, WordPressPostExtractor>();
@@ -49,7 +53,8 @@ var crawler = new ArchiveCrawler(
     logger);
 
 var discoveryStep = new DiscoveryStep(
-    crawler);
+    crawler,
+    serviceProvider.GetRequiredService<IPostStatusStore>());
 var waybackRecoveryStep = serviceProvider.GetRequiredService<WaybackRecoveryStep>();
 
 var extractionStep = new ExtractionStep(serviceProvider.GetRequiredService<IRecoveredPostEnumerationService>(),
@@ -57,7 +62,8 @@ var extractionStep = new ExtractionStep(serviceProvider.GetRequiredService<IReco
     serviceProvider.GetRequiredService<IWordPressCommentExtractor>(),
     serviceProvider.GetRequiredService<IImageExtractor>(),
     outputDirectory,
-    logger);
+    logger,
+    serviceProvider.GetRequiredService<IPostStatusStore>());
 
 var extractedDirectory = Path.Combine(
     outputDirectory,
@@ -67,90 +73,17 @@ var downloadStep = new ImageDownloadStep(
     serviceProvider.GetRequiredService<IExtractedPostEnumerationService>(),
     serviceProvider.GetRequiredService<IImageDownloader>(),
     extractedDirectory,
-    logger);
+    logger,
+    serviceProvider.GetRequiredService<IPostStatusStore>());
 
 var conversionStep = new MarkdownConversionStep(
     serviceProvider.GetRequiredService<IExtractedPostEnumerationService>(),
     serviceProvider.GetRequiredService<IHtmlToMarkdownConverter>(),
     outputDirectory,
-    logger);
+    logger,
+    serviceProvider.GetRequiredService<IPostStatusStore>());
 
-async Task ReviewOutstandingPostsAsync()
-{
-    var postUrlPath = Path.Combine(
-        outputDirectory,
-        "discovery",
-        "post-urls.json");
-
-    var recoveredDirectory = Path.Combine(
-        outputDirectory,
-        "recovered");
-
-    logger.Log();
-    logger.Log("Reviewing outstanding posts...");
-
-    if (!File.Exists(postUrlPath))
-    {
-        logger.Log($"  ERROR: {postUrlPath} was not found.");
-        return;
-    }
-
-    var discoveredPosts = await new PostUrlReader().ReadAsync(postUrlPath);
-
-    var recoveredSlugs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-    if (Directory.Exists(recoveredDirectory))
-    {
-        foreach (var postDirectory in Directory.EnumerateDirectories(recoveredDirectory))
-        {
-            var slug = Path.GetFileName(postDirectory);
-
-            if (string.IsNullOrWhiteSpace(slug))
-                continue;
-
-            var sourcePath = Path.Combine(postDirectory, "source.html");
-            var capturePath = Path.Combine(postDirectory, "capture.json");
-
-            if (File.Exists(sourcePath) && File.Exists(capturePath))
-            {
-                recoveredSlugs.Add(slug);
-            }
-        }
-    }
-
-    var outstandingPosts = discoveredPosts
-        .Where(postUrl => !recoveredSlugs.Contains(GetSlug(postUrl)))
-        .ToList();
-
-    logger.Log($"  Discovered: {discoveredPosts.Count}");
-    logger.Log($"  Recovered: {recoveredSlugs.Count}");
-    logger.Log($"  Outstanding: {outstandingPosts.Count}");
-
-    if (outstandingPosts.Count == 0)
-    {
-        logger.Log("  All discovered posts appear to be recovered.");
-        return;
-    }
-
-    logger.Log("  Outstanding posts:");
-
-    foreach (var outstandingPost in outstandingPosts)
-    {
-        logger.Log($"    - {outstandingPost}");
-    }
-}
-
-static string GetSlug(string postUrl)
-{
-    var uri = new Uri(postUrl);
-
-    return uri.AbsolutePath
-        .Trim('/')
-        .Split(
-            '/',
-            StringSplitOptions.RemoveEmptyEntries)
-        .Last();
-}
+var reviewOutstandingPostsStep = serviceProvider.GetRequiredService<ReviewOutstandingPostsStep>();
 
 while (true)
 {
@@ -213,7 +146,7 @@ while (true)
             await conversionStep.RunAsync();
             break;
         case "6":
-            await ReviewOutstandingPostsAsync();
+            await reviewOutstandingPostsStep.RunAsync();
             break;
 
         case "7":

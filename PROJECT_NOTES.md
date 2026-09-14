@@ -43,6 +43,8 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
 - Add comments sparingly and only when they explain intent, non-obvious decisions, or external contracts that are not obvious from the code itself.
 - When adding project conventions, update `PROJECT_NOTES.md` so the rules are preserved across future changes.
 - The discovery step writes one shared `post-urls.json`.
+- The app now keeps a persistent per-post status manifest in `output/post-status.json` that tracks discovery, recovery, extraction, image download, and Markdown conversion state.
+- Before each step processes a post, it loads the stored status entry and skips posts whose current step is already marked successful, while leaving failed entries available for retry on a later run.
 - If you change the archive month, delete the existing `output` tree first so old discovery/extraction/image/Markdown artifacts do not contaminate the new run.
 - Step 5 intentionally skips existing Markdown files and only recreates them when the file is missing.
 - Local image paths in generated Markdown must be URL-encoded for filenames with spaces or other special characters so VS Code Markdown preview can load them.
@@ -84,6 +86,7 @@ Use this as the working roadmap for future conversations and follow-up work. If 
 - Add a true Ghost export step once Markdown and image output are stable.
 - Evaluate whether archive-page caching should expose more visible status/logging for troubleshooting and repeated runs.
 - Review the generated `output/markdown/index.md` experience and improve how posts are grouped or labeled for easier browsing.
+- Add an in-memory status cache for `post-status.json` so status updates are held in memory and persisted only when changes occur, reducing repeated read/write overhead during large runs.
 
 ### Nice to have
 - Add richer post metadata or front matter to generated Markdown files.

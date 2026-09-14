@@ -34,6 +34,27 @@ function Get-Slug {
     return $segments[-1]
 }
 
+function Is-LocalBlogImageUrl {
+    param([string]$Url)
+
+    if ([string]::IsNullOrWhiteSpace($Url)) {
+        return $false
+    }
+
+    try {
+        $uri = [System.Uri]$Url
+    }
+    catch {
+        return $false
+    }
+
+    $hostName = $uri.Host
+
+    return $hostName.Equals('schwammysays.net', [System.StringComparison]::OrdinalIgnoreCase) -or
+    $hostName.Equals('www.schwammysays.net', [System.StringComparison]::OrdinalIgnoreCase) -or
+    $hostName.EndsWith('.schwammysays.net', [System.StringComparison]::OrdinalIgnoreCase)
+}
+
 Write-Host "Analyzing output from $resolvedOutputRoot"
 Write-Host ''
 
@@ -79,6 +100,10 @@ Write-Host ''
 
 $issues = New-Object System.Collections.Generic.List[string]
 $checkedPosts = 0
+$missingImagePosts = @{}
+$missingImageFiles = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+$missingLocalImageFiles = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+$missingExternalImageFiles = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 
 foreach ($postUrl in $discoveredPosts) {
     $slug = Get-Slug $postUrl
@@ -115,6 +140,73 @@ foreach ($postUrl in $discoveredPosts) {
     if (-not (Test-Path $markdownFile)) {
         $issues.Add("Missing Markdown file for $slug")
     }
+
+    $imagesJsonPath = Join-Path $resolvedOutputRoot "extracted/$slug/images.json"
+    if (Test-Path $imagesJsonPath) {
+        $images = @((Get-Content -Raw -Path $imagesJsonPath | ConvertFrom-Json))
+
+        $localMissing = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+        $externalMissing = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+        foreach ($image in $images) {
+            if ($null -eq $image) {
+                continue
+            }
+
+            $attempts = New-Object System.Collections.Generic.List[pscustomobject]
+
+            if (-not [string]::IsNullOrWhiteSpace($image.LinkedImageUrl) -and -not [string]::IsNullOrWhiteSpace($image.LinkedImageFileName)) {
+                $attempts.Add([pscustomobject]@{
+                        FileName = $image.LinkedImageFileName
+                        Url      = $image.LinkedImageUrl
+                    })
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($image.SourceUrl) -and -not [string]::IsNullOrWhiteSpace($image.FileName)) {
+                $attempts.Add([pscustomobject]@{
+                        FileName = $image.FileName
+                        Url      = $image.SourceUrl
+                    })
+            }
+
+            if ($attempts.Count -eq 0) {
+                continue
+            }
+
+            $anyDownloaded = $false
+            foreach ($attempt in $attempts) {
+                $imagePath = Join-Path $imagesDirectory $attempt.FileName
+                if (Test-Path $imagePath) {
+                    $anyDownloaded = $true
+                    break
+                }
+            }
+
+            if ($anyDownloaded) {
+                continue
+            }
+
+            foreach ($attempt in $attempts) {
+                [void]$missingImageFiles.Add($attempt.FileName)
+
+                if (Is-LocalBlogImageUrl $attempt.Url) {
+                    [void]$localMissing.Add($attempt.FileName)
+                    [void]$missingLocalImageFiles.Add($attempt.FileName)
+                }
+                else {
+                    [void]$externalMissing.Add($attempt.FileName)
+                    [void]$missingExternalImageFiles.Add($attempt.FileName)
+                }
+            }
+        }
+
+        if ($localMissing.Count -gt 0 -or $externalMissing.Count -gt 0) {
+            $missingImagePosts[$slug] = [ordered]@{
+                LocalImages    = @($localMissing | Sort-Object)
+                ExternalImages = @($externalMissing | Sort-Object)
+            }
+        }
+    }
 }
 
 $markdownRoot = Join-Path $resolvedOutputRoot 'markdown'
@@ -127,8 +219,33 @@ $indexExists = Test-Path (Join-Path $markdownRoot 'index.md')
 Write-Host "markdown_file_count=$($markdownFiles.Count)"
 Write-Host "markdown_index_exists=$indexExists"
 
+Write-Host "missing_image_post_count=$($missingImagePosts.Count)"
+Write-Host "missing_local_image_file_count=$($missingLocalImageFiles.Count)"
+Write-Host "missing_external_image_file_count=$($missingExternalImageFiles.Count)"
+
 if ($indexExists -eq $false) {
     $issues.Add('Missing markdown/index.md')
+}
+
+if ($missingImagePosts.Count -gt 0) {
+    Write-Host ''
+    Write-Host 'Missing image analysis:'
+
+    foreach ($entry in $missingImagePosts.GetEnumerator()) {
+        $slug = $entry.Key
+        $localImages = @($entry.Value.LocalImages)
+        $externalImages = @($entry.Value.ExternalImages)
+
+        Write-Host "  - $slug"
+
+        if ($localImages.Count -gt 0) {
+            Write-Host "      Local blog images: $($localImages -join ', ')"
+        }
+
+        if ($externalImages.Count -gt 0) {
+            Write-Host "      External images: $($externalImages -join ', ')"
+        }
+    }
 }
 
 Write-Host ''

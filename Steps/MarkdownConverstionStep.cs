@@ -1,26 +1,30 @@
 using System.Text.Json;
 using SchwammyRecovery.Conversion;
 using SchwammyRecovery.Extraction;
+using SchwammyRecovery.Status;
 
 namespace SchwammyRecovery.Steps;
 
-public sealed class MarkdownConversionStep
+public sealed class MarkdownConversionStep : IStep
 {
     private readonly IExtractedPostEnumerationService _postEnumerationService;
     private readonly IHtmlToMarkdownConverter _converter;
     private readonly string _outputDirectory;
     private readonly Logger _logger;
+    private readonly IPostStatusStore _postStatusStore;
 
     public MarkdownConversionStep(
         IExtractedPostEnumerationService postEnumerationService,
         IHtmlToMarkdownConverter converter,
         string outputDirectory,
-        Logger logger)
+        Logger logger,
+        IPostStatusStore postStatusStore)
     {
         _postEnumerationService = postEnumerationService;
         _converter = converter;
         _outputDirectory = outputDirectory;
         _logger = logger;
+        _postStatusStore = postStatusStore;
     }
 
     public async Task RunAsync(
@@ -42,12 +46,41 @@ public sealed class MarkdownConversionStep
         {
             cancellationToken.ThrowIfCancellationRequested();
 
+            var existingEntry = await _postStatusStore.GetEntryAsync(slug, cancellationToken);
+
+            if (existingEntry is not null &&
+                string.Equals(existingEntry.MarkdownStatus, "S", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.Log($"  SKIP: Markdown already converted for {slug}.");
+                continue;
+            }
+
             _logger.Log(
                 $"Processing Markdown: {slug}");
 
-            await ConvertPostAsync(
-                slug,
-                cancellationToken);
+            try
+            {
+                await ConvertPostAsync(
+                    slug,
+                    cancellationToken);
+
+                await _postStatusStore.UpdateStepStatusAsync(
+                    slug,
+                    nameof(PostStatusEntry.MarkdownStatus),
+                    "S",
+                    cancellationToken: cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.Log($"  ERROR: Failed converting {slug}: {ex.Message}");
+
+                await _postStatusStore.UpdateStepStatusAsync(
+                    slug,
+                    nameof(PostStatusEntry.MarkdownStatus),
+                    "F",
+                    ex.Message,
+                    cancellationToken);
+            }
         }
 
         await WriteTableOfContentsAsync(

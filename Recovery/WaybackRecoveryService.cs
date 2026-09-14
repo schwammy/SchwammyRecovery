@@ -1,5 +1,6 @@
 using System.Text.Json;
 using HtmlAgilityPack;
+using SchwammyRecovery.Status;
 
 namespace SchwammyRecovery.Recovery;
 
@@ -23,17 +24,20 @@ public sealed class WaybackRecoveryService : IWaybackRecoveryService
     private readonly WaybackClient _wayback;
     private readonly string _output;
     private readonly Logger _logger;
+    private readonly IPostStatusStore _postStatusStore;
 
     public WaybackRecoveryService(
         PostUrlReader postUrlReader,
         WaybackClient wayback,
         string output,
-        Logger logger)
+        Logger logger,
+        IPostStatusStore postStatusStore)
     {
         _postUrlReader = postUrlReader;
         _wayback = wayback;
         _output = output;
         _logger = logger;
+        _postStatusStore = postStatusStore;
     }
 
     public async Task PrefetchArchivePagesAsync(
@@ -158,6 +162,12 @@ public sealed class WaybackRecoveryService : IWaybackRecoveryService
                 sourceType: "wayback-capture",
                 archivePageUrl: sourceEntry?.ArchivePageUrl);
 
+            await _postStatusStore.UpdateStepStatusAsync(
+                slug,
+                nameof(PostStatusEntry.RecoveredStatus),
+                "S",
+                cancellationToken: cancellationToken);
+
             _logger.Log($"  SKIP: {postUrl}");
             _logger.Log("        Already recovered.");
             return;
@@ -166,122 +176,153 @@ public sealed class WaybackRecoveryService : IWaybackRecoveryService
         _logger.Log();
         _logger.Log($"  Recovering: {postUrl}");
 
-        var captures = await _wayback.GetCapturesAsync(
-            postUrl,
-            cancellationToken);
-
-        if (captures is null)
+        try
         {
-            _logger.Log(
-                "  Unable to retrieve HTML captures.");
-
-            var archiveFallbackRecovered = await TryRecoverFromArchivePageAsync(
+            var captures = await _wayback.GetCapturesAsync(
                 postUrl,
-                postDirectory,
-                sourceEntry,
                 cancellationToken);
 
-            if (archiveFallbackRecovered)
+            if (captures is null)
             {
+                _logger.Log(
+                    "  Unable to retrieve HTML captures.");
+
+                var archiveFallbackRecovered = await TryRecoverFromArchivePageAsync(
+                    postUrl,
+                    postDirectory,
+                    sourceEntry,
+                    cancellationToken);
+
+                await _postStatusStore.UpdateStepStatusAsync(
+                    slug,
+                    nameof(PostStatusEntry.RecoveredStatus),
+                    archiveFallbackRecovered ? "S" : "F",
+                    archiveFallbackRecovered ? null : "Unable to retrieve HTML captures and archive-page fallback was unavailable.",
+                    cancellationToken);
+
                 return;
             }
 
-            return;
-        }
-
-        if (captures.Count == 0)
-        {
-            _logger.Log("  No HTML captures found.");
-
-            var archiveFallbackRecovered = await TryRecoverFromArchivePageAsync(
-                postUrl,
-                postDirectory,
-                sourceEntry,
-                cancellationToken);
-
-            if (archiveFallbackRecovered)
+            if (captures.Count == 0)
             {
+                _logger.Log("  No HTML captures found.");
+
+                var archiveFallbackRecovered = await TryRecoverFromArchivePageAsync(
+                    postUrl,
+                    postDirectory,
+                    sourceEntry,
+                    cancellationToken);
+
+                await _postStatusStore.UpdateStepStatusAsync(
+                    slug,
+                    nameof(PostStatusEntry.RecoveredStatus),
+                    archiveFallbackRecovered ? "S" : "F",
+                    archiveFallbackRecovered ? null : "No HTML captures were found and archive-page fallback was unavailable.",
+                    cancellationToken);
+
                 return;
             }
 
-            return;
-        }
-
-        _logger.Log(
-            $"  Found {captures.Count} HTML capture(s).");
-
-        foreach (var capture in captures
-                     .OrderByDescending(x => x.Timestamp))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
             _logger.Log(
-                $"  Trying {capture.Timestamp}");
+                $"  Found {captures.Count} HTML capture(s).");
 
-            var html = await _wayback.GetCaptureHtmlAsync(
-                capture,
-                cancellationToken);
-
-            if (string.IsNullOrWhiteSpace(html))
+            foreach (var capture in captures
+                         .OrderByDescending(x => x.Timestamp))
             {
-                _logger.Log("    Not usable.");
-                continue;
-            }
+                cancellationToken.ThrowIfCancellationRequested();
 
-            var postHtml = ExtractPostHtml(
-                html,
-                postUrl,
-                capture.CaptureUrl);
+                _logger.Log(
+                    $"  Trying {capture.Timestamp}");
 
-            if (string.IsNullOrWhiteSpace(postHtml))
-            {
-                _logger.Log("    Could not isolate the requested post article; using the full capture page.");
-                postHtml = html;
-            }
+                var html = await _wayback.GetCaptureHtmlAsync(
+                    capture,
+                    cancellationToken);
 
-            await File.WriteAllTextAsync(
-                sourcePath,
-                postHtml,
-                cancellationToken);
-
-            var json = JsonSerializer.Serialize(
-                capture,
-                new JsonSerializerOptions
+                if (string.IsNullOrWhiteSpace(html))
                 {
-                    WriteIndented = true
-                });
+                    _logger.Log("    Not usable.");
+                    continue;
+                }
 
-            await File.WriteAllTextAsync(
-                capturePath,
-                json,
-                cancellationToken);
+                var postHtml = ExtractPostHtml(
+                    html,
+                    postUrl,
+                    capture.CaptureUrl);
 
-            await WriteProvenanceAsync(
+                if (string.IsNullOrWhiteSpace(postHtml))
+                {
+                    _logger.Log("    Could not isolate the requested post article; using the full capture page.");
+                    postHtml = html;
+                }
+
+                await File.WriteAllTextAsync(
+                    sourcePath,
+                    postHtml,
+                    cancellationToken);
+
+                var json = JsonSerializer.Serialize(
+                    capture,
+                    new JsonSerializerOptions
+                    {
+                        WriteIndented = true
+                    });
+
+                await File.WriteAllTextAsync(
+                    capturePath,
+                    json,
+                    cancellationToken);
+
+                await WriteProvenanceAsync(
+                    postUrl,
+                    postDirectory,
+                    sourceType: "wayback-capture",
+                    archivePageUrl: sourceEntry?.ArchivePageUrl);
+
+                await _postStatusStore.UpdateStepStatusAsync(
+                    slug,
+                    nameof(PostStatusEntry.RecoveredStatus),
+                    "S",
+                    cancellationToken: cancellationToken);
+
+                _logger.Log("  SUCCESS");
+                _logger.Log($"    HTML:    {sourcePath}");
+                _logger.Log($"    Capture: {capturePath}");
+                _logger.Log($"    Provenance: {Path.Combine(postDirectory, "provenance.json")}");
+
+                return;
+            }
+
+            _logger.Log(
+                "  FAILED: No usable capture found.");
+
+            var archiveRecovered = await TryRecoverFromArchivePageAsync(
                 postUrl,
                 postDirectory,
-                sourceType: "wayback-capture",
-                archivePageUrl: sourceEntry?.ArchivePageUrl);
+                sourceEntry,
+                cancellationToken);
 
-            _logger.Log("  SUCCESS");
-            _logger.Log($"    HTML:    {sourcePath}");
-            _logger.Log($"    Capture: {capturePath}");
-            _logger.Log($"    Provenance: {Path.Combine(postDirectory, "provenance.json")}");
+            await _postStatusStore.UpdateStepStatusAsync(
+                slug,
+                nameof(PostStatusEntry.RecoveredStatus),
+                archiveRecovered ? "S" : "F",
+                archiveRecovered ? null : "No usable capture was found and archive-page fallback was unavailable.",
+                cancellationToken);
 
-            return;
+            if (archiveRecovered)
+            {
+                return;
+            }
         }
-
-        _logger.Log(
-            "  FAILED: No usable capture found.");
-
-        var archiveRecovered = await TryRecoverFromArchivePageAsync(
-            postUrl,
-            postDirectory,
-            sourceEntry,
-            cancellationToken);
-
-        if (archiveRecovered)
+        catch (Exception ex)
         {
-            return;
+            await _postStatusStore.UpdateStepStatusAsync(
+                slug,
+                nameof(PostStatusEntry.RecoveredStatus),
+                "F",
+                ex.Message,
+                cancellationToken);
+
+            throw;
         }
     }
 
