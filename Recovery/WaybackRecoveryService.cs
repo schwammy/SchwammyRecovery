@@ -501,9 +501,20 @@ public sealed class WaybackRecoveryService : IWaybackRecoveryService
         string postUrl,
         string archivePageUrl)
     {
-        foreach (var link in article
-                     .SelectNodes(".//a[@href]")
-                     ?? Enumerable.Empty<HtmlNode>())
+        var candidateLinks = new List<HtmlNode>();
+
+        var titleLinks = article.SelectNodes(
+            ".//h1[contains(concat(' ', normalize-space(@class), ' '), ' entry-title ')]//a[@href]")
+            ?? Enumerable.Empty<HtmlNode>();
+
+        var bookmarkLinks = article.SelectNodes(
+            ".//a[@rel='bookmark' and @href]")
+            ?? Enumerable.Empty<HtmlNode>();
+
+        candidateLinks.AddRange(titleLinks);
+        candidateLinks.AddRange(bookmarkLinks);
+
+        foreach (var link in candidateLinks.Distinct())
         {
             var href = link.GetAttributeValue("href", string.Empty);
             if (string.IsNullOrWhiteSpace(href))

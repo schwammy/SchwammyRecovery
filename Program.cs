@@ -112,10 +112,15 @@ while (true)
             logger.Log("Enter the archive year (leave blank to use the default 2007):");
             var yearText = Console.ReadLine();
 
-            logger.Log("Enter the archive month (leave blank to use the default 04):");
-            var monthText = Console.ReadLine();
+            logger.Log("Enter the start month (leave blank to use the default 04):");
+            var startMonthText = Console.ReadLine();
 
-            if (string.IsNullOrWhiteSpace(yearText) && string.IsNullOrWhiteSpace(monthText))
+            logger.Log("Enter the end month (leave blank to use the start month):");
+            var endMonthText = Console.ReadLine();
+
+            if (string.IsNullOrWhiteSpace(yearText) &&
+                string.IsNullOrWhiteSpace(startMonthText) &&
+                string.IsNullOrWhiteSpace(endMonthText))
             {
                 await discoveryStep.RunAsync();
             }
@@ -125,11 +130,15 @@ while (true)
                     ? parsedYear
                     : 2007;
 
-                var month = int.TryParse(monthText, out var parsedMonth)
-                    ? parsedMonth
+                var startMonth = int.TryParse(startMonthText, out var parsedStartMonth)
+                    ? parsedStartMonth
                     : 4;
 
-                await discoveryStep.RunAsync(year, month);
+                var endMonth = int.TryParse(endMonthText, out var parsedEndMonth)
+                    ? parsedEndMonth
+                    : startMonth;
+
+                await discoveryStep.RunAsync(year, startMonth, endMonth);
             }
             break;
         case "2":

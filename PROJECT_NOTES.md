@@ -82,6 +82,7 @@ Use this as the working roadmap for future conversations and follow-up work. If 
 - Re-run the full pipeline after any recovery logic change and compare the resulting artifacts to make sure the fix did not regress earlier working posts.
 
 ### Medium priority
+- Implement a disk-backed CDX query cache (e.g., in `output/cache/cdx/`) so Wayback capture index lookups can be reused indefinitely across pipeline runs without repeating slow network requests.
 - Improve the README so new readers can understand the workflow, generated output tree, and expected local preview steps.
 - Add a true Ghost export step once Markdown and image output are stable.
 - Evaluate whether archive-page caching should expose more visible status/logging for troubleshooting and repeated runs.
