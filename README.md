@@ -107,6 +107,7 @@ The following stages are currently implemented and validated in the local output
 * Markdown conversion with generated `index.md`
 * Outstanding-post review via the interactive menu
 * Portable Markdown export with YAML front matter and self-contained image paths
+* Comment extraction that decodes archived HTML entities and restores original-site comment URLs
 
 The portable export is engine-neutral. It is suitable as an intermediate bundle for
 Ghost, Hugo, Jekyll, or another Markdown-based engine, but it is not a native Ghost

@@ -51,6 +51,10 @@ public sealed class ExtractionStep : IStep
             if (existingEntry is not null &&
                 string.Equals(existingEntry.ExtractedStatus, "S", StringComparison.OrdinalIgnoreCase))
             {
+                await _wordPressCommentExtractor.ExtractAsync(
+                    slug,
+                    cancellationToken);
+
                 await _codeAnalysisExtractor.AnalyzeAsync(slug, cancellationToken);
                 _logger.Log($"  SKIP: Extraction already completed for {slug}.");
                 continue;

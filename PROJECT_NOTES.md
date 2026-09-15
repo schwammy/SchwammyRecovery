@@ -52,6 +52,7 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
 - Step 5 intentionally skips existing Markdown files and only recreates them when the file is missing.
 - The portable export reads recovery and Markdown artifacts without modifying them.
 - Code review metadata is written to `output/extracted/<slug>/code-analysis.json`; it is derived from `content.html` and does not modify recovery or extraction source artifacts.
+- Step 3 regenerates derived comment JSON for completed posts, decoding repeated HTML entities and normalizing comment URLs out of Wayback captures.
 - Export-local image paths use `../assets/<slug>/...` from each exported post.
 - Local image paths in generated Markdown must be URL-encoded for filenames with spaces or other special characters so VS Code Markdown preview can load them.
 

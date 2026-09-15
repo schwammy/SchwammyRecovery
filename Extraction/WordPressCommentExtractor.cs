@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 
 using HtmlAgilityPack;
@@ -54,14 +55,6 @@ public sealed class WordPressCommentExtractor
         var commentsPath = Path.Combine(
             extractedDirectory,
             "comments.json");
-
-        if (File.Exists(commentsPath))
-        {
-            _logger.Log(
-                $"Skipping {slug}: comments already extracted.");
-
-            return;
-        }
 
         var html = await File.ReadAllTextAsync(
             sourcePath,
@@ -127,10 +120,10 @@ public sealed class WordPressCommentExtractor
                 {
                     Id = node.GetAttributeValue("id", null),
                     Type = type,
-                    Content = link?.InnerText.Trim(),
-                    Url = link?.GetAttributeValue(
+                    Content = DecodeText(link?.InnerText),
+                    Url = NormalizePublishedUrl(link?.GetAttributeValue(
                         "href",
-                        null)
+                        null))
                 });
 
                 continue;
@@ -169,7 +162,7 @@ public sealed class WordPressCommentExtractor
             .SelectSingleNode(
                 ".//a[contains(concat(' ', normalize-space(@class), ' '), ' url ')]");
 
-        var author = authorNode?.InnerText.Trim();
+        var author = DecodeText(authorNode?.InnerText);
 
         var dateNode = node.SelectSingleNode(
             ".//time");
@@ -187,16 +180,65 @@ public sealed class WordPressCommentExtractor
             Id = node.GetAttributeValue("id", null),
             Type = "comment",
             Author = author,
-            AuthorUrl = authorLink?
-                .GetAttributeValue("href", null),
+            AuthorUrl = NormalizePublishedUrl(authorLink?
+                .GetAttributeValue("href", null)),
             Date = dateNode?
                 .GetAttributeValue("datetime", null)
-                ?? dateNode?.InnerText.Trim(),
-            Content = contentNode?.InnerText.Trim(),
-            Url = dateNode?
+                ?? DecodeText(dateNode?.InnerText),
+            Content = DecodeText(contentNode?.InnerText),
+            Url = NormalizePublishedUrl(dateNode?
                 .ParentNode?
-                .GetAttributeValue("href", null),
+                .GetAttributeValue("href", null)),
             ParentId = ExtractParentId(node)
         };
+    }
+
+    private static string? DecodeText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return value;
+
+        var decoded = value.Trim();
+
+        for (var index = 0; index < 3; index++)
+        {
+            var next = WebUtility.HtmlDecode(decoded);
+            if (string.Equals(next, decoded, StringComparison.Ordinal))
+                break;
+
+            decoded = next;
+        }
+
+        return decoded;
+    }
+
+    private static string? NormalizePublishedUrl(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return value;
+
+        var url = WebUtility.HtmlDecode(value.Trim());
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            !uri.Host.Equals("web.archive.org", StringComparison.OrdinalIgnoreCase))
+        {
+            return url;
+        }
+
+        const string marker = "/web/";
+        var markerIndex = url.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex < 0)
+            return url;
+
+        var remainder = url[(markerIndex + marker.Length)..];
+        var separatorIndex = remainder.IndexOf('/');
+        if (separatorIndex < 0)
+            return url;
+
+        var originalUrl = remainder[(separatorIndex + 1)..];
+        return originalUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+               originalUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            ? Uri.UnescapeDataString(originalUrl)
+            : url;
     }
 }
