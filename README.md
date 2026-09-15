@@ -16,7 +16,7 @@ The recovery process is divided into independent, repeatable steps:
 4. **Recover images**
 5. **Convert to Markdown**
 6. **Review outstanding posts**
-7. **Export to Ghost**
+7. **Create a portable Markdown export**
 
 Each step produces files on disk that become the input to the next step. This makes the recovery process inspectable and allows individual steps to be rerun without repeating the entire process.
 
@@ -44,6 +44,7 @@ output/
 │   └── <slug>/
 │       ├── content.html
 │       ├── images.json
+│       ├── code-analysis.json
 │       ├── post.json
 │       └── comments.json
 ├── images/
@@ -54,6 +55,12 @@ output/
 │   ├── index.md
 │   └── <slug>/
 │       └── post.md
+├── export/
+│   └── portable-markdown/
+│       ├── manifest.json
+│       ├── posts/<slug>/post.md
+│       ├── assets/<slug>/...
+│       └── comments/<slug>.json
 ├── logs/
 │   └── ...
 └── recovered/
@@ -99,8 +106,12 @@ The following stages are currently implemented and validated in the local output
 * Image recovery and local download
 * Markdown conversion with generated `index.md`
 * Outstanding-post review via the interactive menu
+* Portable Markdown export with YAML front matter and self-contained image paths
 
-The remaining stage is Ghost export, which is intentionally not implemented yet.
+The portable export is engine-neutral. It is suitable as an intermediate bundle for
+Ghost, Hugo, Jekyll, or another Markdown-based engine, but it is not a native Ghost
+JSON import. A future engine adapter can consume this bundle without rereading or
+modifying the recovery artifacts.
 
 ## Running the Application
 

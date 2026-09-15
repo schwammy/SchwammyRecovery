@@ -5,6 +5,7 @@ using SchwammyRecovery.Extraction;
 using SchwammyRecovery.Conversion;
 using SchwammyRecovery.Recovery;
 using SchwammyRecovery.Status;
+using SchwammyRecovery.Export;
 
 var outputDirectory = "output";
 
@@ -34,10 +35,12 @@ services.AddScoped<IRecoveredPostEnumerationService, RecoveredPostEnumerationSer
 services.AddScoped<IWordPressPostExtractor, WordPressPostExtractor>();
 services.AddScoped<IWordPressCommentExtractor, WordPressCommentExtractor>();
 services.AddScoped<IImageExtractor, ImageExtractor>();
+services.AddScoped<ICodeAnalysisExtractor, CodeAnalysisExtractor>();
 services.AddScoped<IImageDownloader, ImageDownloader>();
 services.AddScoped<IExtractedPostEnumerationService, ExtractedPostEnumerationService>();
 services.AddScoped<IHtmlToMarkdownConverter, HtmlToMarkdownConverter>();
 services.AddTransient<MarkdownConversionStep>();
+services.AddTransient<PortableMarkdownExportStep>();
 
 using var serviceProvider = services.BuildServiceProvider();
 
@@ -61,6 +64,7 @@ var extractionStep = new ExtractionStep(serviceProvider.GetRequiredService<IReco
     serviceProvider.GetRequiredService<IWordPressPostExtractor>(),
     serviceProvider.GetRequiredService<IWordPressCommentExtractor>(),
     serviceProvider.GetRequiredService<IImageExtractor>(),
+    serviceProvider.GetRequiredService<ICodeAnalysisExtractor>(),
     outputDirectory,
     logger,
     serviceProvider.GetRequiredService<IPostStatusStore>());
@@ -84,6 +88,7 @@ var conversionStep = new MarkdownConversionStep(
     serviceProvider.GetRequiredService<IPostStatusStore>());
 
 var reviewOutstandingPostsStep = serviceProvider.GetRequiredService<ReviewOutstandingPostsStep>();
+var portableMarkdownExportStep = serviceProvider.GetRequiredService<PortableMarkdownExportStep>();
 
 while (true)
 {
@@ -96,7 +101,7 @@ while (true)
     logger.Log("4. Recover images");
     logger.Log("5. Convert to Markdown");
     logger.Log("6. Review outstanding posts");
-    logger.Log("7. Export to Ghost");
+    logger.Log("7. Create portable Markdown export");
     logger.Log("Q. Quit");
     logger.Log();
     logger.Log("Select an option: ");
@@ -159,7 +164,7 @@ while (true)
             break;
 
         case "7":
-            logger.Log("Not implemented yet.");
+            await portableMarkdownExportStep.RunAsync();
             break;
 
         case "Q":

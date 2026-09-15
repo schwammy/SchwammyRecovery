@@ -11,6 +11,7 @@ This repository is a .NET 8 console application that recovers archived WordPress
 - Discovery writes `output/discovery/post-urls.json`; later stages consume that file.
 - If switching to a different archive month, delete the existing `output` tree before rerunning discovery and downstream steps.
 - Step 5 intentionally skips existing Markdown files and only creates missing files.
+- Step 7 creates the additive `output/export/portable-markdown/` bundle; it must never modify recovery, extraction, image, or preview Markdown artifacts.
 
 ## Important rules
 - Local image paths in generated Markdown must be URL-encoded for filenames with spaces and other special characters.
@@ -33,6 +34,9 @@ This repository is a .NET 8 console application that recovers archived WordPress
 - Local Markdown preview works when image filenames are encoded correctly.
 - The Vista test post demonstrates the need for URL-encoding in filenames such as `My Windows Experience Rating.jpg`.
 - Recovery should normalize captured/archive-page URLs back to the original post URL before trying to isolate the matching article.
+- The portable export has been validated across 121 posts and is an engine-neutral intermediate; do not call it a native Ghost import.
+- The Markdown converter preserves recovered formatted code as fenced blocks; regenerate derived Markdown after converter changes because Step 5 skips existing files.
+- Use `custom-server-controls-createchildcontrols-or-render` as the large-code regression post when validating converter changes.
 
 ## Keep in sync
 Update this file when the workflow, rules, or current target month change.

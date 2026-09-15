@@ -71,6 +71,15 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
         switch (node.Name.ToLowerInvariant())
         {
             case "p":
+                if (LooksLikeCodeBlock(node))
+                {
+                    AppendCodeBlock(
+                        node,
+                        builder,
+                        language: "csharp");
+                    break;
+                }
+
                 ConvertChildren(
                     node,
                     builder,
@@ -84,6 +93,19 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
 
             case "br":
                 builder.Append('\n');
+                break;
+
+            case "pre":
+                AppendCodeBlock(
+                    node,
+                    builder,
+                    GetCodeLanguage(node));
+                break;
+
+            case "code":
+                builder.Append('`');
+                AppendCodeText(node, builder);
+                builder.Append('`');
                 break;
 
             case "h1":
@@ -292,6 +314,120 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                 imagesDirectory,
                 listDepth);
         }
+    }
+
+    private static bool LooksLikeCodeBlock(HtmlNode node)
+    {
+        var lineBreakCount = node
+            .Descendants("br")
+            .Count();
+
+        if (lineBreakCount < 2)
+            return false;
+
+        var hasColoredSyntax = node
+            .Descendants("span")
+            .Any(span => span.GetAttributeValue("style", string.Empty).Contains(
+                "color",
+                StringComparison.OrdinalIgnoreCase) == true);
+
+        if (hasColoredSyntax)
+            return true;
+
+        var text = WebUtility.HtmlDecode(node.InnerText);
+
+        return text.Contains('{') &&
+               text.Contains('}') &&
+               (text.Contains(';') ||
+                text.Contains("public ", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("private ", StringComparison.OrdinalIgnoreCase) ||
+                text.Contains("class ", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void AppendCodeBlock(
+        HtmlNode node,
+        StringBuilder builder,
+        string language)
+    {
+        var code = new StringBuilder();
+        AppendCodeText(node, code);
+
+        var normalizedCode = NormalizeCodeText(code.ToString());
+        if (string.IsNullOrWhiteSpace(normalizedCode))
+            return;
+
+        EnsureLineStart(builder);
+        builder.Append("```");
+        builder.Append(language);
+        builder.Append('\n');
+        builder.Append(normalizedCode);
+        builder.Append('\n');
+        builder.Append("```\n\n");
+    }
+
+    private static void AppendCodeText(
+        HtmlNode node,
+        StringBuilder builder)
+    {
+        if (node.NodeType == HtmlNodeType.Text)
+        {
+            builder.Append(node.InnerText);
+            return;
+        }
+
+        if (node.NodeType != HtmlNodeType.Element)
+            return;
+
+        if (string.Equals(node.Name, "br", StringComparison.OrdinalIgnoreCase))
+        {
+            builder.Append('\n');
+            return;
+        }
+
+        foreach (var child in node.ChildNodes)
+            AppendCodeText(child, builder);
+    }
+
+    private static string NormalizeCodeText(string code)
+    {
+        code = WebUtility.HtmlDecode(code)
+            .Replace('\u00A0', ' ')
+            .Replace("\r\n", "\n")
+            .Replace('\r', '\n');
+
+        var lines = code.Split('\n').ToList();
+
+        while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines[0]))
+            lines.RemoveAt(0);
+
+        while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines[^1]))
+            lines.RemoveAt(lines.Count - 1);
+
+        return string.Join('\n', lines);
+    }
+
+    private static string GetCodeLanguage(HtmlNode node)
+    {
+        var className = node.GetAttributeValue("class", string.Empty);
+
+        if (className.Contains("csharp", StringComparison.OrdinalIgnoreCase) ||
+            className.Contains("cs", StringComparison.OrdinalIgnoreCase))
+        {
+            return "csharp";
+        }
+
+        var text = WebUtility.HtmlDecode(node.InnerText);
+
+        if (text.Contains("CreateChildControls", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("HtmlTextWriter", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("protected override", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("private ", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("public ", StringComparison.OrdinalIgnoreCase))
+        {
+            return "csharp";
+        }
+
+        return "text";
     }
 
     private static void AppendHeading(

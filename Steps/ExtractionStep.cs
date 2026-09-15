@@ -11,6 +11,7 @@ public sealed class ExtractionStep : IStep
     private readonly IWordPressPostExtractor _wordPressPostExtractor;
     private readonly IWordPressCommentExtractor _wordPressCommentExtractor;
     private readonly IImageExtractor _imageExtractor;
+    private readonly ICodeAnalysisExtractor _codeAnalysisExtractor;
     private readonly IPostStatusStore _postStatusStore;
 
     public ExtractionStep(
@@ -18,6 +19,7 @@ public sealed class ExtractionStep : IStep
         IWordPressPostExtractor wordPressPostExtractor,
         IWordPressCommentExtractor wordPressCommentExtractor,
         IImageExtractor imageExtractor,
+        ICodeAnalysisExtractor codeAnalysisExtractor,
         string outputDirectory,
         Logger logger,
         IPostStatusStore postStatusStore)
@@ -27,6 +29,7 @@ public sealed class ExtractionStep : IStep
         _wordPressCommentExtractor = wordPressCommentExtractor;
         _outputDirectory = outputDirectory;
         _imageExtractor = imageExtractor;
+        _codeAnalysisExtractor = codeAnalysisExtractor;
         _logger = logger;
         _postStatusStore = postStatusStore;
     }
@@ -48,6 +51,7 @@ public sealed class ExtractionStep : IStep
             if (existingEntry is not null &&
                 string.Equals(existingEntry.ExtractedStatus, "S", StringComparison.OrdinalIgnoreCase))
             {
+                await _codeAnalysisExtractor.AnalyzeAsync(slug, cancellationToken);
                 _logger.Log($"  SKIP: Extraction already completed for {slug}.");
                 continue;
             }
@@ -63,6 +67,10 @@ public sealed class ExtractionStep : IStep
                     cancellationToken);
 
                 await _imageExtractor.ExtractAsync(
+                    slug,
+                    cancellationToken);
+
+                await _codeAnalysisExtractor.AnalyzeAsync(
                     slug,
                     cancellationToken);
 

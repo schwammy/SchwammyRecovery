@@ -29,12 +29,15 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
    - recovers archived HTML for discovered posts
    - caches archive pages for reuse in `output/archive-pages/...`
 3. Extraction
-   - extracts `content.html`, comments, and `images.json`
+  - extracts `content.html`, comments, `images.json`, and derived `code-analysis.json`
 4. Image download
    - downloads recovered images into `output/images/<slug>/`
 5. Markdown conversion
    - writes Markdown files to `output/markdown/<slug>/post.md`
    - also generates `output/markdown/index.md` as a clickable table of contents
+6. Portable export
+  - writes an engine-neutral bundle to `output/export/portable-markdown/`
+  - adds YAML front matter, copies images into `assets/`, and preserves comments as JSON sidecars
 
 ## Project conventions and coding rules
 - Keep interfaces and their primary implementations together in the same file/folder unless the interface intentionally has multiple implementations.
@@ -47,6 +50,9 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
 - Before each step processes a post, it loads the stored status entry and skips posts whose current step is already marked successful, while leaving failed entries available for retry on a later run.
 - If you change the archive month, delete the existing `output` tree first so old discovery/extraction/image/Markdown artifacts do not contaminate the new run.
 - Step 5 intentionally skips existing Markdown files and only recreates them when the file is missing.
+- The portable export reads recovery and Markdown artifacts without modifying them.
+- Code review metadata is written to `output/extracted/<slug>/code-analysis.json`; it is derived from `content.html` and does not modify recovery or extraction source artifacts.
+- Export-local image paths use `../assets/<slug>/...` from each exported post.
 - Local image paths in generated Markdown must be URL-encoded for filenames with spaces or other special characters so VS Code Markdown preview can load them.
 
 ## Current verified behavior
@@ -59,6 +65,10 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
 - Step 5 now skips existing Markdown files and only recreates them when the file is missing.
 - Discovery was switched to April 2007 for additional image-heavy content testing.
 - The Vista post now previews correctly after regenerating the Markdown.
+- Portable Markdown export has been validated across 121 recovered posts.
+- Export metadata HTML-decodes recovered values before writing YAML front matter.
+- Markdown conversion preserves semantic `<pre>/<code>` blocks and legacy Visual Studio code paragraphs as fenced C# blocks with indentation intact.
+- `custom-server-controls-createchildcontrols-or-render` is the large-code regression post; its generic `<pre class="code">` blocks are inferred as C# and export with `csharp` fences.
 - Recovery now normalizes Wayback/archive-page URLs back to the original post URL before isolating the target article, which avoids saving full archive pages as `source.html`.
 
 ## Recent useful targets
@@ -82,6 +92,7 @@ Use this as the working roadmap for future conversations and follow-up work. If 
 - Re-run the full pipeline after any recovery logic change and compare the resulting artifacts to make sure the fix did not regress earlier working posts.
 
 ### Medium priority
+- Choose and implement a native engine adapter after confirming the publishing target. Ghost requires a native JSON import shape rather than this Markdown bundle.
 - Implement a disk-backed CDX query cache (e.g., in `output/cache/cdx/`) so Wayback capture index lookups can be reused indefinitely across pipeline runs without repeating slow network requests.
 - Improve the README so new readers can understand the workflow, generated output tree, and expected local preview steps.
 - Add a true Ghost export step once Markdown and image output are stable.
