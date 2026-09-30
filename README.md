@@ -4,7 +4,7 @@ A tool for recovering content from an old website using the Internet Archive's W
 
 The original **Schwammy Says** website was a WordPress blog that is no longer available online. This project is being used to recover its posts, comments, images, and other content from archived copies in the Wayback Machine.
 
-The immediate goal is to recover the content into a clean, portable form that can eventually be imported into a new blogging platform such as Ghost.
+The immediate goal is to recover the content into a clean, portable form for publishing as a static site.
 
 ## Recovery Pipeline
 
@@ -63,7 +63,6 @@ output/
 │       └── comments/<slug>.json
 ├── logs/
 │   └── ...
-└── recovered/
 ```
 
 `output/` is generated data and is not part of the application's source code.
@@ -110,9 +109,21 @@ The following stages are currently implemented and validated in the local output
 * Comment extraction that decodes archived HTML entities and restores original-site comment URLs
 
 The portable export is engine-neutral. It is suitable as an intermediate bundle for
-Ghost, Hugo, Jekyll, or another Markdown-based engine, but it is not a native Ghost
-JSON import. A future engine adapter can consume this bundle without rereading or
-modifying the recovery artifacts.
+Hugo or another Markdown-based engine. It is not a native Ghost JSON or WordPress
+import.
+
+## Publishing Status
+
+The intended publishing stack is Hugo generated from the portable export and
+deployed to GitHub Pages with GitHub Actions. The site, deployment workflow,
+legacy URL mapping, search, comments, and analytics are not implemented yet.
+Historical comments will remain archived with comments closed; CommentBox.io is
+planned for new posts. Pagefind is the current search candidate. See
+[`PROJECT_NOTES.md`](PROJECT_NOTES.md) for decisions and outstanding work.
+
+The intended root domain is `schwammysays.net`, but production DNS will remain
+unchanged until the temporary Pages site has been reviewed. Reassess GitHub Pages
+terms before enabling monetization.
 
 ## Running the Application
 

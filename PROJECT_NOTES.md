@@ -1,7 +1,24 @@
 # SchwammyRecovery Project Notes
 
 ## Goal
-Recover archived WordPress posts from Wayback, extract content and images, download local copies, and convert recovered posts to Markdown for preview and later publishing.
+Recover archived WordPress posts from Wayback, extract content and images, download local copies, and convert recovered posts to Markdown for preview and publication through a static site.
+
+## Documentation ownership
+- This file is the source of truth for project architecture, decisions, status, and todo priorities.
+- `README.md` is the concise, user-facing project overview and implementation status.
+- `.github/copilot-instructions.md` contains only repository-specific instructions for Copilot behavior and workflow.
+
+## Publishing direction
+- Generate the public site with Hugo from the portable Markdown export.
+- Build and deploy with GitHub Actions to GitHub Pages.
+- Use `schwammysays.net` as the intended root domain after the temporary Pages site has been reviewed. Do not change domain registration or DNS as part of local development; domain changes require explicit approval.
+- Preserve historical post paths as closely as possible. Derive Hugo permalinks from recovered original URLs, then identify and map exceptions before pointing the domain.
+- Keep the portable Markdown export and comment JSON sidecars as the local, engine-neutral source copies. Do not modify recovery or extraction artifacts while building the public site.
+- Render recovered comments at the end of each post with a comments-closed notice. Use CommentBox.io for new posts only, subject to confirming its current pricing, moderation features, and comment export/portability.
+- Use Google Analytics 4 for statistics. Account for its tracking script and any required privacy notice or consent behavior before enabling it publicly.
+- A static client-side search index is required. Pagefind is the current candidate; selection and implementation are still pending.
+- GitHub Pages is the initial low-cost host, not an irreversible platform choice. Reassess its terms and migrate hosts before enabling monetization if the site's plans no longer fit those terms.
+- The publishing site and deployment workflow are planned, not yet implemented or validated.
 
 ## Current architecture
 - `Program.cs`
@@ -22,20 +39,22 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
   - orchestrates each pipeline stage
 
 ## Current workflow
-1. Discovery
-   - runs `DiscoveryStep`
+1. Discover post URLs
+  - runs `DiscoveryStep`; with no date input, the menu defaults to April 2007
    - writes `output/discovery/post-urls.json`
-2. Wayback recovery
+2. Recover Wayback HTML
    - recovers archived HTML for discovered posts
    - caches archive pages for reuse in `output/archive-pages/...`
-3. Extraction
+3. Extract post content
   - extracts `content.html`, comments, `images.json`, and derived `code-analysis.json`
-4. Image download
-   - downloads recovered images into `output/images/<slug>/`
-5. Markdown conversion
+4. Recover images
+  - downloads images for extracted posts into `output/images/<slug>/`
+5. Convert to Markdown
    - writes Markdown files to `output/markdown/<slug>/post.md`
    - also generates `output/markdown/index.md` as a clickable table of contents
-6. Portable export
+6. Review outstanding posts
+  - reports discovered and recovered counts, outstanding posts, and missing image downloads/files
+7. Create portable Markdown export
   - writes an engine-neutral bundle to `output/export/portable-markdown/`
   - adds YAML front matter, copies images into `assets/`, and preserves comments as JSON sidecars
 
@@ -93,10 +112,15 @@ Use this as the working roadmap for future conversations and follow-up work. If 
 - Re-run the full pipeline after any recovery logic change and compare the resulting artifacts to make sure the fix did not regress earlier working posts.
 
 ### Medium priority
-- Choose and implement a native engine adapter after confirming the publishing target. Ghost requires a native JSON import shape rather than this Markdown bundle.
+- Build the Hugo site from the portable Markdown export without mutating recovery, extraction, or export source artifacts.
+- Add a GitHub Actions workflow to build Hugo and deploy the site to GitHub Pages; validate first at the temporary `github.io` address.
+- Audit recovered original URLs and configure Hugo permalinks and redirects to preserve legacy paths.
+- Evaluate and implement a client-side search index (Pagefind is the current candidate).
+- Add CommentBox.io for new posts only after checking plan terms, moderation, and comment export; keep historical comment rendering and JSON archives independent.
+- Add Google Analytics 4 after deciding privacy notice and consent requirements.
+- Review GitHub Pages policy before monetization; select and test a replacement host before any necessary move.
 - Implement a disk-backed CDX query cache (e.g., in `output/cache/cdx/`) so Wayback capture index lookups can be reused indefinitely across pipeline runs without repeating slow network requests.
 - Improve the README so new readers can understand the workflow, generated output tree, and expected local preview steps.
-- Add a true Ghost export step once Markdown and image output are stable.
 - Evaluate whether archive-page caching should expose more visible status/logging for troubleshooting and repeated runs.
 - Review the generated `output/markdown/index.md` experience and improve how posts are grouped or labeled for easier browsing.
 - Add an in-memory status cache for `post-status.json` so status updates are held in memory and persisted only when changes occur, reducing repeated read/write overhead during large runs.

@@ -4,7 +4,8 @@
 This repository is a .NET 8 console application that recovers archived WordPress posts from Wayback, extracts content and images, downloads local copies, and converts recovered posts to Markdown.
 
 ## Read first
-- Read `PROJECT_NOTES.md` before making code changes. It contains the repository conventions, architecture notes, and the current task list.
+- Read `PROJECT_NOTES.md` before making code changes. It is the source of truth for architecture, decisions, status, and todos.
+- Keep `README.md` user-facing and concise. Keep this file limited to instructions governing Copilot's behavior and workflow.
 
 ## Workflow
 - Use the existing local `output` tree under `bin/Debug/net8.0` when validating generated Markdown and images.
@@ -12,6 +13,7 @@ This repository is a .NET 8 console application that recovers archived WordPress
 - If switching to a different archive month, delete the existing `output` tree before rerunning discovery and downstream steps.
 - Step 5 intentionally skips existing Markdown files and only creates missing files.
 - Step 7 creates the additive `output/export/portable-markdown/` bundle; it must never modify recovery, extraction, image, or preview Markdown artifacts.
+- Do not change production domain registration or DNS without explicit user approval. Validate publishing changes on a temporary URL first.
 
 ## Important rules
 - Local image paths in generated Markdown must be URL-encoded for filenames with spaces and other special characters.
@@ -23,20 +25,6 @@ This repository is a .NET 8 console application that recovers archived WordPress
 - The user handles Git commits; leave changes uncommitted unless the user explicitly asks for a commit.
 - When the user says they are done for the night, at lunch, or taking a similar break, provide a short prompt they can use to start the next session.
 - When the user says they are done for the night, offer a concise handoff summary focused on what was completed, what is still pending, and any current todo items; keep it short because the detailed project context already lives in `PROJECT_NOTES.md`.
-- When adding something to Copilot memory, consider whether it should live in `copilot-instructions.md` or `PROJECT_NOTES.md`.
+- When adding repository knowledge, put project decisions and status in `PROJECT_NOTES.md`; put only Copilot behavior and workflow rules here.
 - When we identify an item as a todo and decide to delay or defer that fix, add it to the `Current todo list` section of `PROJECT_NOTES.md`.
-- After making changes in design, process, workflow, or todo items, remember to update both `copilot-instructions.md` and `PROJECT_NOTES.md` as needed.
-
-## Current active target
-- April 2007 is the current discovery target in `Steps/DiscoveryStep.cs`.
-
-## Recent verified findings
-- Local Markdown preview works when image filenames are encoded correctly.
-- The Vista test post demonstrates the need for URL-encoding in filenames such as `My Windows Experience Rating.jpg`.
-- Recovery should normalize captured/archive-page URLs back to the original post URL before trying to isolate the matching article.
-- The portable export has been validated across 121 posts and is an engine-neutral intermediate; do not call it a native Ghost import.
-- The Markdown converter preserves recovered formatted code as fenced blocks; regenerate derived Markdown after converter changes because Step 5 skips existing files.
-- Use `custom-server-controls-createchildcontrols-or-render` as the large-code regression post when validating converter changes.
-
-## Keep in sync
-Update this file when the workflow, rules, or current target month change.
+- Update `PROJECT_NOTES.md` when decisions or todo items change, `README.md` when user-facing workflow or status changes, and this file only when Copilot-specific instructions change.
