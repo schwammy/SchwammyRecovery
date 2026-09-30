@@ -114,9 +114,11 @@ import.
 
 ## Publishing Status
 
-The intended publishing stack is Hugo generated from the portable export and
-deployed to GitHub Pages with GitHub Actions. The site, deployment workflow,
-legacy URL mapping, search, comments, and analytics are not implemented yet.
+The intended publishing stack is a separate Hugo blog repository generated from
+selected copies of the portable export and deployed to GitHub Pages with GitHub
+Actions. This repository remains dedicated to recovery and export. The separate
+site, deployment workflow, legacy URL mapping, search, comments, and analytics are
+not implemented yet.
 Historical comments will remain archived with comments closed; CommentBox.io is
 planned for new posts. Pagefind is the current search candidate. See
 [`PROJECT_NOTES.md`](PROJECT_NOTES.md) for decisions and outstanding work.

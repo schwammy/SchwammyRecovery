@@ -1,7 +1,7 @@
 # SchwammyRecovery Project Notes
 
 ## Goal
-Recover archived WordPress posts from Wayback, extract content and images, download local copies, and convert recovered posts to Markdown for preview and publication through a static site.
+Recover archived WordPress posts from Wayback, extract content and images, download local copies, and produce a portable Markdown export for preview and a separate blog project.
 
 ## Documentation ownership
 - This file is the source of truth for project architecture, decisions, status, and todo priorities.
@@ -9,8 +9,9 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
 - `.github/copilot-instructions.md` contains only repository-specific instructions for Copilot behavior and workflow.
 
 ## Publishing direction
-- Generate the public site with Hugo from the portable Markdown export.
-- Build and deploy with GitHub Actions to GitHub Pages.
+- Keep Hugo site generation, blog content, and GitHub Actions deployment in a separate blog repository. This repository remains dedicated to Wayback recovery and portable export; do not add the blog site or deployment workflow here.
+- Copy selected, publication-ready content from the portable Markdown export into the blog repository. Do not expose raw Wayback captures or recovery intermediates as part of the blog.
+- Generate the public site with Hugo and deploy it with GitHub Actions to GitHub Pages from the separate blog repository.
 - Use `schwammysays.net` as the intended root domain after the temporary Pages site has been reviewed. Do not change domain registration or DNS as part of local development; domain changes require explicit approval.
 - Preserve historical post paths as closely as possible. Derive Hugo permalinks from recovered original URLs, then identify and map exceptions before pointing the domain.
 - Keep the portable Markdown export and comment JSON sidecars as the local, engine-neutral source copies. Do not modify recovery or extraction artifacts while building the public site.
@@ -112,8 +113,8 @@ Use this as the working roadmap for future conversations and follow-up work. If 
 - Re-run the full pipeline after any recovery logic change and compare the resulting artifacts to make sure the fix did not regress earlier working posts.
 
 ### Medium priority
-- Build the Hugo site from the portable Markdown export without mutating recovery, extraction, or export source artifacts.
-- Add a GitHub Actions workflow to build Hugo and deploy the site to GitHub Pages; validate first at the temporary `github.io` address.
+- Create a separate blog repository for Hugo, then prove the publishing path with copies of three representative exported posts (prose, code, and images/comments); leave this recovery repository and its export untouched.
+- Add a GitHub Actions workflow in the separate blog repository to build Hugo and deploy the site to GitHub Pages; validate first at the temporary `github.io` address.
 - Audit recovered original URLs and configure Hugo permalinks and redirects to preserve legacy paths.
 - Evaluate and implement a client-side search index (Pagefind is the current candidate).
 - Add CommentBox.io for new posts only after checking plan terms, moderation, and comment export; keep historical comment rendering and JSON archives independent.
