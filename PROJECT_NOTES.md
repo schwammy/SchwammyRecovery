@@ -12,6 +12,7 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
 - Keep Hugo site generation, blog content, and GitHub Actions deployment in a separate blog repository. This repository remains dedicated to Wayback recovery and portable export; do not add the blog site or deployment workflow here.
 - Copy selected, publication-ready content from the portable Markdown export into the blog repository. Do not expose raw Wayback captures or recovery intermediates as part of the blog.
 - The blog importer adds Hugo-only provenance metadata (for example, `archive_recovered: true`) to selected imported posts; a shared layout or partial uses that flag to show the archive-recovery notice. Do not add the notice or Hugo-specific metadata to recovery artifacts or portable exports.
+- For posts confirmed unrecoverable after review, preserve a minimal stub with original identifying metadata and an engine-neutral status (for example, `recovery_status: unrecoverable`) in the portable export. The blog importer maps that status to Hugo-only stub metadata, and the shared layout displays a clear not-recovered notice. Do not stub posts that are still pending review or have transient recovery failures.
 - Generate the public site with Hugo and deploy it with GitHub Actions to GitHub Pages from the separate blog repository.
 - Use `schwammysays.net` as the intended root domain after the temporary Pages site has been reviewed. Do not change domain registration or DNS as part of local development; domain changes require explicit approval.
 - Preserve historical post paths as closely as possible. Derive Hugo permalinks from recovered original URLs, then identify and map exceptions before pointing the domain.
@@ -116,6 +117,7 @@ Use this as the working roadmap for future conversations and follow-up work. If 
 ### Medium priority
 - Add an import script in the blog repository that copies explicitly selected portable-export posts and assets into Hugo content bundles, adds Hugo-only archive-provenance front matter to imported copies, previews planned changes, and prevents accidental overwrites; leave the portable export untouched.
 - Implement the front-matter-driven archive-recovery notice in the Hugo layout and finalize its public wording.
+- Represent posts confirmed unrecoverable after review as minimal portable-export stubs with original metadata and an engine-neutral recovery status; have the blog importer create corresponding Hugo stub posts and display a not-recovered notice. Keep pending posts and transient failures distinct.
 - Audit recovered original URLs and configure Hugo permalinks and redirects to preserve legacy paths.
 - Evaluate and implement a client-side search index (Pagefind is the current candidate).
 - Add CommentBox.io for new posts only after checking plan terms, moderation, and comment export; keep historical comment rendering and JSON archives independent.
