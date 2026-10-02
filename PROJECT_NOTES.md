@@ -121,6 +121,7 @@ Use this as the working roadmap for future conversations and follow-up work. If 
 
 ### Medium priority
 - Add an import script in the blog repository that copies explicitly selected portable-export posts and assets into Hugo content bundles, adds Hugo-only archive-provenance front matter to imported copies, previews planned changes, and prevents accidental overwrites; leave the portable export untouched.
+- Evaluate a portable-export fallback for unavailable images: bundle a generic placeholder, use clear alt text, and optionally link it to the original or archived image URL. Keep Step 5 and recovery artifacts unchanged.
 - Implement the front-matter-driven archive-recovery notice in the Hugo layout and finalize its public wording.
 - Represent posts confirmed unrecoverable after review as minimal portable-export stubs with original metadata and an engine-neutral recovery status; have the blog importer create corresponding Hugo stub posts and display a not-recovered notice. Keep pending posts and transient failures distinct.
 - Audit recovered original URLs and configure Hugo permalinks and redirects to preserve legacy paths.

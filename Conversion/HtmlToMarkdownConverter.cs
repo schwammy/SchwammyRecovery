@@ -80,6 +80,14 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                     break;
                 }
 
+                if (LooksLikeUnformattedCodeSample(node))
+                {
+                    AppendUnformattedCodeSample(
+                        node,
+                        builder);
+                    break;
+                }
+
                 ConvertChildren(
                     node,
                     builder,
@@ -92,7 +100,8 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                 break;
 
             case "br":
-                builder.Append('\n');
+                // Two trailing spaces make this an explicit Markdown line break, not a soft wrap.
+                builder.Append("  \n");
                 break;
 
             case "pre":
@@ -328,6 +337,7 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
 
     private static bool LooksLikeCodeBlock(HtmlNode node)
     {
+        // Require multiple lines and explicit syntax coloring so code-like examples in prose stay plain.
         var lineBreakCount = node
             .Descendants("br")
             .Count();
@@ -344,6 +354,14 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
         if (hasColoredSyntax)
             return true;
 
+        return false;
+    }
+
+    private static bool LooksLikeUnformattedCodeSample(HtmlNode node)
+    {
+        if (node.Descendants("br").Count() < 2)
+            return false;
+
         var text = WebUtility.HtmlDecode(node.InnerText);
 
         return text.Contains('{') &&
@@ -352,6 +370,22 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                 text.Contains("public ", StringComparison.OrdinalIgnoreCase) ||
                 text.Contains("private ", StringComparison.OrdinalIgnoreCase) ||
                 text.Contains("class ", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static void AppendUnformattedCodeSample(
+        HtmlNode node,
+        StringBuilder builder)
+    {
+        var code = new StringBuilder();
+        AppendCodeText(node, code);
+
+        var lines = NormalizeCodeText(code.ToString())
+            .Split('\n');
+
+        // Blank lines preserve visible breaks in Markdown without adding a code fence.
+        EnsureLineStart(builder);
+        builder.Append(string.Join("\n\n", lines));
+        AppendParagraphBreak(builder);
     }
 
     private static void AppendCodeBlock(
@@ -482,17 +516,36 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
         string? imagesDirectory,
         int listDepth)
     {
-        builder.Append(marker);
-
+        var content = new StringBuilder();
         ConvertChildren(
             node,
-            builder,
+            content,
             imagesBySourceUrl,
             imagePathPrefix,
             imagesDirectory,
             listDepth);
 
+        var value = content.ToString();
+        var trailingBreaks = new StringBuilder();
+        while (value.EndsWith("  \n", StringComparison.Ordinal))
+        {
+            value = value[..^3];
+            trailingBreaks.Insert(0, "  \n");
+        }
+
+        var leadingWhitespaceLength = value.Length - value.TrimStart().Length;
+        var trailingWhitespaceStart = value.TrimEnd().Length;
+        var leadingWhitespace = value[..leadingWhitespaceLength];
+        var trailingWhitespace = value[trailingWhitespaceStart..];
+        value = value.Trim();
+
+        // Close Markdown emphasis before trailing hard breaks so the break stays outside the wrapper.
+        builder.Append(leadingWhitespace);
         builder.Append(marker);
+        builder.Append(value);
+        builder.Append(marker);
+        builder.Append(trailingWhitespace);
+        builder.Append(trailingBreaks);
     }
 
     private static void AppendLink(
@@ -527,6 +580,7 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
             var image = node.Descendants("img").FirstOrDefault();
             if (image is not null)
             {
+                // Preserve destinations on image-only links, including archived video thumbnails.
                 builder.Append('[');
                 AppendImage(
                     image,
@@ -776,6 +830,7 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
         string? imagesDirectory,
         int listDepth)
     {
+        // Nested tables are converted separately; this table handles only its own rows.
         var rows = node
             .Descendants("tr")
             .Where(row => ReferenceEquals(
@@ -794,6 +849,7 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                 .ToList())
             .ToList();
 
+        // A single row of linked entries reads better as a list than as a wide table.
         if (LooksLikeLinkedRoster(rows, cellsByRow))
         {
             AppendLinkedRoster(
@@ -806,6 +862,7 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
             return;
         }
 
+        // Legacy posts often use one-cell tables for layout, not tabular data.
         if (cellsByRow.All(cells => cells.Count <= 1))
         {
             foreach (var cell in cellsByRow.SelectMany(cells => cells))
@@ -836,6 +893,7 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                         listDepth))
                     .ToList()
             })
+            // Malformed legacy tables can leave empty rows that should not appear in Markdown.
             .Where(row => row.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
             .ToList();
 
@@ -843,6 +901,7 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
             return;
 
         var columnCount = tableRows.Max(row => row.Values.Count);
+        // Treat bold first-row cells like headers when older HTML uses td instead of th.
         var hasHeader = tableRows[0].Cells.Any(cell =>
             cell.Name.Equals("th", StringComparison.OrdinalIgnoreCase)) ||
                         LooksLikeFormattedHeaderRow(tableRows[0].Cells);
@@ -851,6 +910,7 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
 
         if (!hasHeader)
         {
+            // Markdown tables require a header separator, so use an empty header row when needed.
             AppendMarkdownTableRow(
                 builder,
                 Enumerable.Repeat(string.Empty, columnCount).ToList());
@@ -980,7 +1040,9 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
             imagesDirectory,
             listDepth);
 
+        // Keep cell line breaks inline so they do not split the surrounding Markdown table row.
         return NormalizeMarkdown(content.ToString())
+            .Replace("  \n", "<br>", StringComparison.Ordinal)
             .Replace("\n", "<br>", StringComparison.Ordinal)
             .Replace("|", "\\|", StringComparison.Ordinal)
             .Trim();
@@ -1153,7 +1215,9 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
             .Replace("\r\n", "\n")
             .Replace("\r", "\n")
             .Split('\n')
-            .Select(line => line.TrimEnd())
+            .Select(line => line.EndsWith("  ", StringComparison.Ordinal)
+                ? line
+                : line.TrimEnd())
             .ToList();
 
         var result = new List<string>();
@@ -1176,9 +1240,7 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
             blankLine = false;
         }
 
-        return string.Join(
-            Environment.NewLine,
-            result).Trim();
+        return string.Join("\n", result).Trim();
     }
 }
 

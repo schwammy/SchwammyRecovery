@@ -20,6 +20,7 @@
       "problemMatcher": "$msCompile",
       "presentation": {
         "reveal": "always",
+        "focus": true,
         "panel": "dedicated"
       }
     }
