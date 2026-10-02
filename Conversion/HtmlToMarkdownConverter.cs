@@ -239,6 +239,16 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                     ordered: true);
                 break;
 
+            case "table":
+                ConvertTable(
+                    node,
+                    builder,
+                    imagesBySourceUrl,
+                    imagePathPrefix,
+                    imagesDirectory,
+                    listDepth);
+                break;
+
             case "li":
                 ConvertChildren(
                     node,
@@ -417,6 +427,12 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
         }
 
         var text = WebUtility.HtmlDecode(node.InnerText);
+
+        if (text.Contains("<asp:", StringComparison.OrdinalIgnoreCase) ||
+            text.Contains("<%@", StringComparison.Ordinal))
+        {
+            return "html";
+        }
 
         if (text.Contains("CreateChildControls", StringComparison.OrdinalIgnoreCase) ||
             text.Contains("HtmlTextWriter", StringComparison.OrdinalIgnoreCase) ||
@@ -734,6 +750,199 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
         }
 
         builder.Append('\n');
+    }
+
+    private static void ConvertTable(
+        HtmlNode node,
+        StringBuilder builder,
+        IReadOnlyDictionary<string, RecoveredImage> imagesBySourceUrl,
+        string imagePathPrefix,
+        string? imagesDirectory,
+        int listDepth)
+    {
+        var rows = node
+            .Descendants("tr")
+            .Where(row => ReferenceEquals(
+                row.Ancestors("table").FirstOrDefault(),
+                node))
+            .ToList();
+
+        if (rows.Count == 0)
+            return;
+
+        var cellsByRow = rows
+            .Select(row => row.ChildNodes
+                .Where(child => child.NodeType == HtmlNodeType.Element &&
+                                (child.Name.Equals("td", StringComparison.OrdinalIgnoreCase) ||
+                                 child.Name.Equals("th", StringComparison.OrdinalIgnoreCase)))
+                .ToList())
+            .ToList();
+
+        if (LooksLikeLinkedRoster(rows, cellsByRow))
+        {
+            AppendLinkedRoster(
+                cellsByRow[0],
+                builder,
+                imagesBySourceUrl,
+                imagePathPrefix,
+                imagesDirectory,
+                listDepth);
+            return;
+        }
+
+        var hasHeader = cellsByRow[0].Any(cell =>
+            cell.Name.Equals("th", StringComparison.OrdinalIgnoreCase)) ||
+                        LooksLikeFormattedHeaderRow(cellsByRow[0]);
+
+        EnsureLineStart(builder);
+
+        for (var rowIndex = 0; rowIndex < cellsByRow.Count; rowIndex++)
+        {
+            var cells = cellsByRow[rowIndex];
+            var values = cells
+                .Select(cell => ConvertTableCell(
+                    cell,
+                    imagesBySourceUrl,
+                    imagePathPrefix,
+                    imagesDirectory,
+                    listDepth))
+                .ToList();
+
+            if (values.All(string.IsNullOrWhiteSpace))
+                continue;
+
+            if (hasHeader && rowIndex == 0)
+            {
+                AppendMarkdownTableRow(builder, values);
+                AppendMarkdownTableRow(
+                    builder,
+                    values.Select(_ => "---").ToList());
+            }
+            else if (hasHeader)
+            {
+                AppendMarkdownTableRow(builder, values);
+            }
+            else
+            {
+                builder.Append(string.Join(" | ", values));
+                builder.Append("<br>\n");
+            }
+        }
+
+        AppendParagraphBreak(builder);
+    }
+
+    private static bool LooksLikeLinkedRoster(
+        IReadOnlyList<HtmlNode> rows,
+        IReadOnlyList<List<HtmlNode>> cellsByRow)
+    {
+        if (rows.Count != 1 || cellsByRow[0].Count < 2)
+            return false;
+
+        return cellsByRow[0].All(cell =>
+            cell.Name.Equals("td", StringComparison.OrdinalIgnoreCase) &&
+            cell.ChildNodes.Count(child => child.Name.Equals("br", StringComparison.OrdinalIgnoreCase)) >= 2 &&
+            cell.Descendants("a").Count() >= 2);
+    }
+
+    private static bool LooksLikeFormattedHeaderRow(
+        IReadOnlyList<HtmlNode> cells)
+    {
+        return cells.Count > 0 && cells.All(cell =>
+        {
+            var elements = cell.ChildNodes
+                .Where(child => child.NodeType == HtmlNodeType.Element)
+                .ToList();
+
+            return elements.Count > 0 &&
+                   elements.All(child =>
+                       child.Name.Equals("strong", StringComparison.OrdinalIgnoreCase) ||
+                       child.Name.Equals("b", StringComparison.OrdinalIgnoreCase));
+        });
+    }
+
+    private static void AppendLinkedRoster(
+        IReadOnlyList<HtmlNode> cells,
+        StringBuilder builder,
+        IReadOnlyDictionary<string, RecoveredImage> imagesBySourceUrl,
+        string imagePathPrefix,
+        string? imagesDirectory,
+        int listDepth)
+    {
+        foreach (var cell in cells)
+        {
+            var item = new StringBuilder();
+
+            foreach (var child in cell.ChildNodes)
+            {
+                if (child.Name.Equals("br", StringComparison.OrdinalIgnoreCase))
+                {
+                    AppendRosterItem(item, builder, listDepth);
+                    continue;
+                }
+
+                ConvertNode(
+                    child,
+                    item,
+                    imagesBySourceUrl,
+                    imagePathPrefix,
+                    imagesDirectory,
+                    listDepth);
+            }
+
+            AppendRosterItem(item, builder, listDepth);
+        }
+
+        AppendParagraphBreak(builder);
+    }
+
+    private static void AppendRosterItem(
+        StringBuilder item,
+        StringBuilder builder,
+        int listDepth)
+    {
+        var value = item.ToString().Trim();
+        item.Clear();
+
+        if (string.IsNullOrWhiteSpace(value))
+            return;
+
+        EnsureLineStart(builder);
+        builder.Append(new string(' ', listDepth * 2));
+        builder.Append("- ");
+        builder.Append(value);
+        builder.Append('\n');
+    }
+
+    private static string ConvertTableCell(
+        HtmlNode cell,
+        IReadOnlyDictionary<string, RecoveredImage> imagesBySourceUrl,
+        string imagePathPrefix,
+        string? imagesDirectory,
+        int listDepth)
+    {
+        var content = new StringBuilder();
+        ConvertChildren(
+            cell,
+            content,
+            imagesBySourceUrl,
+            imagePathPrefix,
+            imagesDirectory,
+            listDepth);
+
+        return NormalizeMarkdown(content.ToString())
+            .Replace(Environment.NewLine, "<br>", StringComparison.Ordinal)
+            .Replace("|", "\\|", StringComparison.Ordinal)
+            .Trim();
+    }
+
+    private static void AppendMarkdownTableRow(
+        StringBuilder builder,
+        IReadOnlyList<string> cells)
+    {
+        builder.Append("| ");
+        builder.Append(string.Join(" | ", cells));
+        builder.Append(" |\n");
     }
 
     private static void ConvertListItem(

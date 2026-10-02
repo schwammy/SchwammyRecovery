@@ -78,6 +78,7 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
 - Step 3 regenerates derived comment JSON for completed posts, decoding repeated HTML entities and normalizing comment URLs out of Wayback captures.
 - Export-local image paths use `../assets/<slug>/...` from each exported post.
 - Local image paths in generated Markdown must be URL-encoded for filenames with spaces or other special characters so VS Code Markdown preview can load them.
+- Markdown table conversion uses row/cell structure rather than stray `<br>` tags between table elements. Tables with `<th>` cells or an all-bold first row become Markdown tables; one-row linked rosters with `<br>`-separated entries become bullet lists. Other headerless tables retain row and cell separators.
 
 ## Current verified behavior
 - Markdown preview now works for local images when generated paths are encoded correctly.
