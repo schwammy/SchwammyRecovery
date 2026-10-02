@@ -524,6 +524,22 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
 
         if (string.IsNullOrWhiteSpace(text))
         {
+            var image = node.Descendants("img").FirstOrDefault();
+            if (image is not null)
+            {
+                builder.Append('[');
+                AppendImage(
+                    image,
+                    builder,
+                    imagesBySourceUrl,
+                    imagePathPrefix,
+                    imagesDirectory);
+                builder.Append("](");
+                builder.Append(NormalizePublishedUrl(href.Trim()));
+                builder.Append(')');
+                return;
+            }
+
             ConvertChildren(
                 node,
                 builder,
@@ -790,42 +806,76 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
             return;
         }
 
-        var hasHeader = cellsByRow[0].Any(cell =>
-            cell.Name.Equals("th", StringComparison.OrdinalIgnoreCase)) ||
-                        LooksLikeFormattedHeaderRow(cellsByRow[0]);
-
-        EnsureLineStart(builder);
-
-        for (var rowIndex = 0; rowIndex < cellsByRow.Count; rowIndex++)
+        if (cellsByRow.All(cells => cells.Count <= 1))
         {
-            var cells = cellsByRow[rowIndex];
-            var values = cells
-                .Select(cell => ConvertTableCell(
+            foreach (var cell in cellsByRow.SelectMany(cells => cells))
+            {
+                ConvertChildren(
                     cell,
+                    builder,
                     imagesBySourceUrl,
                     imagePathPrefix,
                     imagesDirectory,
-                    listDepth))
-                .ToList();
+                    listDepth);
+            }
 
-            if (values.All(string.IsNullOrWhiteSpace))
-                continue;
+            AppendParagraphBreak(builder);
+            return;
+        }
+
+        var tableRows = cellsByRow
+            .Select(cells => new
+            {
+                Cells = cells,
+                Values = cells
+                    .Select(cell => ConvertTableCell(
+                        cell,
+                        imagesBySourceUrl,
+                        imagePathPrefix,
+                        imagesDirectory,
+                        listDepth))
+                    .ToList()
+            })
+            .Where(row => row.Values.Any(value => !string.IsNullOrWhiteSpace(value)))
+            .ToList();
+
+        if (tableRows.Count == 0)
+            return;
+
+        var columnCount = tableRows.Max(row => row.Values.Count);
+        var hasHeader = tableRows[0].Cells.Any(cell =>
+            cell.Name.Equals("th", StringComparison.OrdinalIgnoreCase)) ||
+                        LooksLikeFormattedHeaderRow(tableRows[0].Cells);
+
+        EnsureLineStart(builder);
+
+        if (!hasHeader)
+        {
+            AppendMarkdownTableRow(
+                builder,
+                Enumerable.Repeat(string.Empty, columnCount).ToList());
+            AppendMarkdownTableRow(
+                builder,
+                Enumerable.Repeat("---", columnCount).ToList());
+        }
+
+        for (var rowIndex = 0; rowIndex < tableRows.Count; rowIndex++)
+        {
+            var values = tableRows[rowIndex].Values;
+            values.AddRange(Enumerable.Repeat(
+                string.Empty,
+                columnCount - values.Count));
 
             if (hasHeader && rowIndex == 0)
             {
                 AppendMarkdownTableRow(builder, values);
                 AppendMarkdownTableRow(
                     builder,
-                    values.Select(_ => "---").ToList());
-            }
-            else if (hasHeader)
-            {
-                AppendMarkdownTableRow(builder, values);
+                    Enumerable.Repeat("---", columnCount).ToList());
             }
             else
             {
-                builder.Append(string.Join(" | ", values));
-                builder.Append("<br>\n");
+                AppendMarkdownTableRow(builder, values);
             }
         }
 
@@ -931,7 +981,7 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
             listDepth);
 
         return NormalizeMarkdown(content.ToString())
-            .Replace(Environment.NewLine, "<br>", StringComparison.Ordinal)
+            .Replace("\n", "<br>", StringComparison.Ordinal)
             .Replace("|", "\\|", StringComparison.Ordinal)
             .Trim();
     }

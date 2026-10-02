@@ -1,0 +1,27 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build and run SchwammyRecovery",
+      "type": "process",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-Command",
+        "dotnet build .\\SchwammyRecovery.csproj; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; Set-Location .\\bin\\Debug\\net8.0; & .\\SchwammyRecovery.exe"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder:SchwammyRecovery}"
+      },
+      "problemMatcher": "$msCompile",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    }
+  ]
+}
