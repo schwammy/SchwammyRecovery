@@ -176,7 +176,7 @@ foreach ($postUrl in $discoveredPosts) {
             $anyDownloaded = $false
             foreach ($attempt in $attempts) {
                 $imagePath = Join-Path $imagesDirectory $attempt.FileName
-                if (Test-Path $imagePath) {
+                if (Test-Path -LiteralPath $imagePath) {
                     $anyDownloaded = $true
                     break
                 }

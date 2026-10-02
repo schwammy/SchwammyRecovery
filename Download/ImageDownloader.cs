@@ -4,7 +4,7 @@ namespace SchwammyRecovery.Extraction;
 
 public interface IImageDownloader
 {
-    Task DownloadAsync(
+    Task<bool> DownloadAsync(
     string slug,
     CancellationToken cancellationToken = default);
 }
@@ -26,7 +26,7 @@ public sealed class ImageDownloader : IImageDownloader
         _logger = logger;
     }
 
-    public async Task DownloadAsync(
+    public async Task<bool> DownloadAsync(
         string slug,
         CancellationToken cancellationToken = default)
     {
@@ -40,7 +40,7 @@ public sealed class ImageDownloader : IImageDownloader
         {
             _logger.Log(
                 $"  SKIP: No extracted images found for {slug}.");
-            return;
+            return false;
         }
 
         var imagesDirectory = Path.Combine(
@@ -57,18 +57,25 @@ public sealed class ImageDownloader : IImageDownloader
         var images = JsonSerializer.Deserialize<List<RecoveredImage>>(
             json) ?? [];
 
+        var allImagesDownloaded = true;
+
         foreach (var image in images)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            await DownloadImageAsync(
-                image,
-                imagesDirectory,
-                cancellationToken);
+            if (!await DownloadImageAsync(
+                    image,
+                    imagesDirectory,
+                    cancellationToken))
+            {
+                allImagesDownloaded = false;
+            }
         }
+
+        return allImagesDownloaded;
     }
 
-    private async Task DownloadImageAsync(
+    private async Task<bool> DownloadImageAsync(
         RecoveredImage image,
         string imagesDirectory,
         CancellationToken cancellationToken)
@@ -77,8 +84,10 @@ public sealed class ImageDownloader : IImageDownloader
         {
             _logger.Log(
                 "  SKIP: Image has no usable filename.");
-            return;
+            return false;
         }
+
+        var linkedImageExists = false;
 
         if (!string.IsNullOrWhiteSpace(image.LinkedImageUrl) &&
             !string.IsNullOrWhiteSpace(image.LinkedImageFileName))
@@ -89,6 +98,7 @@ public sealed class ImageDownloader : IImageDownloader
 
             if (File.Exists(linkedImagePath))
             {
+                linkedImageExists = true;
                 _logger.Log(
                     $"  SKIP: {image.LinkedImageFileName} already exists.");
             }
@@ -99,7 +109,7 @@ public sealed class ImageDownloader : IImageDownloader
             {
                 _logger.Log(
                     $"  Downloaded linked image: {image.LinkedImageFileName}");
-                return;
+                return true;
             }
         }
 
@@ -111,7 +121,7 @@ public sealed class ImageDownloader : IImageDownloader
         {
             _logger.Log(
                 $"  SKIP: {image.FileName} already exists.");
-            return;
+            return true;
         }
 
         if (await TryDownloadAsync(
@@ -121,11 +131,12 @@ public sealed class ImageDownloader : IImageDownloader
         {
             _logger.Log(
                 $"  Downloaded: {image.FileName}");
-            return;
+            return true;
         }
 
         _logger.Log(
             $"  FAILED: Could not download {image.FileName}.");
+        return linkedImageExists;
     }
 
     private async Task<bool> TryDownloadAsync(

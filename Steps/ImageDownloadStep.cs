@@ -41,27 +41,19 @@ public sealed class ImageDownloadStep : IStep
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var existingEntry = await _postStatusStore.GetEntryAsync(slug, cancellationToken);
-
-            if (existingEntry is not null &&
-                string.Equals(existingEntry.ImagesStatus, "S", StringComparison.OrdinalIgnoreCase))
-            {
-                _logger.Log($"  SKIP: Image download already completed for {slug}.");
-                continue;
-            }
-
             _logger.Log($"Processing images: {slug}");
 
             try
             {
-                await _imageDownloader.DownloadAsync(
+                var allImagesDownloaded = await _imageDownloader.DownloadAsync(
                     slug,
                     cancellationToken);
 
                 await _postStatusStore.UpdateStepStatusAsync(
                     slug,
                     nameof(PostStatusEntry.ImagesStatus),
-                    "S",
+                    allImagesDownloaded ? "S" : "F",
+                    allImagesDownloaded ? null : "One or more images could not be downloaded.",
                     cancellationToken: cancellationToken);
             }
             catch (Exception ex)

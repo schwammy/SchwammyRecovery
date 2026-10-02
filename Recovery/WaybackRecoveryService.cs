@@ -156,11 +156,27 @@ public sealed class WaybackRecoveryService : IWaybackRecoveryService
         if (File.Exists(sourcePath) &&
             File.Exists(capturePath))
         {
+            var captureJson = await File.ReadAllTextAsync(
+                capturePath,
+                cancellationToken);
+            var existingCapture = JsonSerializer.Deserialize<WaybackCapture>(
+                captureJson);
+            var isArchivePageFallback = existingCapture?.Timestamp ==
+                "archive-page-fallback";
+
             await WriteProvenanceAsync(
                 postUrl,
                 postDirectory,
-                sourceType: "wayback-capture",
-                archivePageUrl: sourceEntry?.ArchivePageUrl);
+                sourceType: isArchivePageFallback ? "archive-page" : "wayback-capture",
+                archivePageUrl: isArchivePageFallback
+                    ? existingCapture!.CaptureUrl
+                    : sourceEntry?.ArchivePageUrl,
+                archivePagePath: isArchivePageFallback
+                    ? GetArchivePageStoragePath(existingCapture!.CaptureUrl)
+                    : null,
+                notes: isArchivePageFallback
+                    ? "Recovered from the archive page because no usable Wayback capture was available."
+                    : null);
 
             await _postStatusStore.UpdateStepStatusAsync(
                 slug,

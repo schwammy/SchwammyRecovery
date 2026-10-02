@@ -70,6 +70,7 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
 - The discovery step writes one shared `post-urls.json`.
 - The app now keeps a persistent per-post status manifest in `output/post-status.json` that tracks discovery, recovery, extraction, image download, and Markdown conversion state.
 - Before each step processes a post, it loads the stored status entry and skips posts whose current step is already marked successful, while leaving failed entries available for retry on a later run.
+- Step 4 rechecks image files on every run, skips files already present, retries missing files, and marks the post failed if any image remains unavailable.
 - If you change the archive month, delete the existing `output` tree first so old discovery/extraction/image/Markdown artifacts do not contaminate the new run.
 - Step 5 intentionally skips existing Markdown files and only recreates them when the file is missing.
 - The portable export reads recovery and Markdown artifacts without modifying them.
@@ -93,6 +94,10 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
 - Markdown conversion preserves semantic `<pre>/<code>` blocks and legacy Visual Studio code paragraphs as fenced C# blocks with indentation intact.
 - `custom-server-controls-createchildcontrols-or-render` is the large-code regression post; its generic `<pre class="code">` blocks are inferred as C# and export with `csharp` fences.
 - Recovery now normalizes Wayback/archive-page URLs back to the original post URL before isolating the target article, which avoids saving full archive pages as `source.html`.
+- Recovery reruns preserve archive-page provenance for existing fallback artifacts by checking the `archive-page-fallback` marker in `capture.json`.
+- On 2026-10-01, the output audit covered 126 discovered URLs (121 unique slugs), found no outstanding posts, and validated all 50 archive-page fallbacks for matching provenance, cached pages, article-shaped source HTML, and nonempty extracted content and Markdown. The portable export contains 121 posts.
+- The same audit found no missing required artifacts or local blog images, but 30 external image files remain unavailable across 13 posts. Step 4 now records those 13 posts as failed rather than successful; the latest manifest has 108 image-stage successes and 13 failures.
+- `scripts/Analyze-Output.ps1` checks image paths literally so square brackets in filenames are not treated as wildcards.
 
 ## Recent useful targets
 - Current discovery start URL is April 2007:
@@ -109,9 +114,8 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
 Use this as the working roadmap for future conversations and follow-up work. If a fix is deferred, add it here so the outstanding work stays visible.
 
 ### High priority
-- Finish a full end-to-end validation pass across the discovered posts and confirm the remaining recovered outputs are correct, especially posts that rely on archive-page fallback instead of direct captures.
-- Review the discovered-but-not-yet-recovered cases and decide which are expected gaps versus true defects that should be fixed in the recovery path.
-- Audit the generated output tree for consistency after recovery/extraction/conversion, including provenance files, `source.html`, `content.html`, `images.json`, and `output/markdown/index.md`.
+- Complete a content-quality spot check across direct captures and archive-page fallbacks; the structural audit passes, but this did not manually review every post's rendered content.
+- Investigate the 30 unavailable external image files across 13 posts and distinguish inaccessible archived media from recoverable URL or filename defects.
 - Re-run the full pipeline after any recovery logic change and compare the resulting artifacts to make sure the fix did not regress earlier working posts.
 
 ### Medium priority
