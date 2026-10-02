@@ -11,6 +11,7 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
 ## Publishing direction
 - Keep Hugo site generation, blog content, and GitHub Actions deployment in a separate blog repository. This repository remains dedicated to Wayback recovery and portable export; do not add the blog site or deployment workflow here.
 - Copy selected, publication-ready content from the portable Markdown export into the blog repository. Do not expose raw Wayback captures or recovery intermediates as part of the blog.
+- The blog importer adds Hugo-only provenance metadata (for example, `archive_recovered: true`) to selected imported posts; a shared layout or partial uses that flag to show the archive-recovery notice. Do not add the notice or Hugo-specific metadata to recovery artifacts or portable exports.
 - Generate the public site with Hugo and deploy it with GitHub Actions to GitHub Pages from the separate blog repository.
 - Use `schwammysays.net` as the intended root domain after the temporary Pages site has been reviewed. Do not change domain registration or DNS as part of local development; domain changes require explicit approval.
 - Preserve historical post paths as closely as possible. Derive Hugo permalinks from recovered original URLs, then identify and map exceptions before pointing the domain.
@@ -19,7 +20,7 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
 - Use Google Analytics 4 for statistics. Account for its tracking script and any required privacy notice or consent behavior before enabling it publicly.
 - A static client-side search index is required. Pagefind is the current candidate; selection and implementation are still pending.
 - GitHub Pages is the initial low-cost host, not an irreversible platform choice. Reassess its terms and migrate hosts before enabling monetization if the site's plans no longer fit those terms.
-- The publishing site and deployment workflow are planned, not yet implemented or validated.
+- The separate Hugo blog and GitHub Actions deployment proof of concept were implemented and validated at the temporary GitHub Pages URL. The Pages site is currently unpublished; the production domain and DNS are unchanged.
 
 ## Current architecture
 - `Program.cs`
@@ -113,8 +114,8 @@ Use this as the working roadmap for future conversations and follow-up work. If 
 - Re-run the full pipeline after any recovery logic change and compare the resulting artifacts to make sure the fix did not regress earlier working posts.
 
 ### Medium priority
-- Create a separate blog repository for Hugo, then prove the publishing path with copies of three representative exported posts (prose, code, and images/comments); leave this recovery repository and its export untouched.
-- Add a GitHub Actions workflow in the separate blog repository to build Hugo and deploy the site to GitHub Pages; validate first at the temporary `github.io` address.
+- Add an import script in the blog repository that copies explicitly selected portable-export posts and assets into Hugo content bundles, adds Hugo-only archive-provenance front matter to imported copies, previews planned changes, and prevents accidental overwrites; leave the portable export untouched.
+- Implement the front-matter-driven archive-recovery notice in the Hugo layout and finalize its public wording.
 - Audit recovered original URLs and configure Hugo permalinks and redirects to preserve legacy paths.
 - Evaluate and implement a client-side search index (Pagefind is the current candidate).
 - Add CommentBox.io for new posts only after checking plan terms, moderation, and comment export; keep historical comment rendering and JSON archives independent.
