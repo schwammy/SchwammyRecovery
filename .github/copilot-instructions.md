@@ -13,6 +13,7 @@ This repository is a .NET 8 console application that recovers archived WordPress
 - If switching to a different archive month, delete the existing `output` tree before rerunning discovery and downstream steps.
 - Step 5 intentionally skips existing Markdown files and only creates missing files.
 - Step 7 creates the additive `output/export/portable-markdown/` bundle; it must never modify recovery, extraction, image, or preview Markdown artifacts.
+- When working on the Hugo blog or GitHub Pages, run Hugo commands from the separate `SchwammySaysBlog` repository root, not from this recovery repository.
 - Do not change production domain registration or DNS without explicit user approval. Validate publishing changes on a temporary URL first.
 
 ## Important rules
