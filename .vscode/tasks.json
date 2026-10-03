@@ -23,6 +23,26 @@
         "focus": true,
         "panel": "dedicated"
       }
+    },
+    {
+      "label": "Test converter regressions",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "test",
+        "${workspaceFolder:SchwammyRecovery}\\tests\\SchwammyRecovery.Tests\\SchwammyRecovery.Tests.csproj",
+        "--configuration",
+        "Release"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder:SchwammyRecovery}"
+      },
+      "problemMatcher": "$msCompile",
+      "presentation": {
+        "reveal": "always",
+        "focus": true,
+        "panel": "dedicated"
+      }
     }
   ]
 }

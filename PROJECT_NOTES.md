@@ -64,6 +64,7 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
 ## Project conventions and coding rules
 - Keep interfaces and their primary implementations together in the same file/folder unless the interface intentionally has multiple implementations.
 - Prefer small, single-responsibility services for logic and keep steps focused on orchestration.
+- Every behavior change to `Conversion/HtmlToMarkdownConverter.cs` must add or update a regression test in `tests/SchwammyRecovery.Tests/`.
 - Keep DTOs and metadata classes in separate files when they are meaningful domain objects instead of nested local types.
 - Add comments sparingly and only when they explain intent, non-obvious decisions, or external contracts that are not obvious from the code itself.
 - When adding project conventions, update `PROJECT_NOTES.md` so the rules are preserved across future changes.
@@ -94,6 +95,7 @@ Recover archived WordPress posts from Wayback, extract content and images, downl
 - Export metadata HTML-decodes recovered values before writing YAML front matter.
 - Markdown conversion preserves semantic `<pre>/<code>` blocks and legacy Visual Studio code paragraphs as fenced C# blocks with indentation intact.
 - `custom-server-controls-createchildcontrols-or-render` is the large-code regression post; its generic `<pre class="code">` blocks are inferred as C# and export with `csharp` fences.
+- A 38-case xUnit suite in `tests/SchwammyRecovery.Tests/` covers converter regressions and established behavior; run it with `dotnet test tests/SchwammyRecovery.Tests/SchwammyRecovery.Tests.csproj --configuration Release`.
 - Recovery now normalizes Wayback/archive-page URLs back to the original post URL before isolating the target article, which avoids saving full archive pages as `source.html`.
 - Recovery reruns preserve archive-page provenance for existing fallback artifacts by checking the `archive-page-fallback` marker in `capture.json`.
 - On 2026-10-01, the output audit covered 126 discovered URLs (121 unique slugs), found no outstanding posts, and validated all 50 archive-page fallbacks for matching provenance, cached pages, article-shaped source HTML, and nonempty extracted content and Markdown. The portable export contains 121 posts.
@@ -138,7 +140,7 @@ Use this as the working roadmap for future conversations and follow-up work. If 
 ### Nice to have
 - Add richer post metadata or front matter to generated Markdown files.
 - Improve the extraction pipeline to surface more useful summaries of recovered comments and image usage.
-- Consider adding a small test suite around the most fragile recovery and conversion behaviors.
+- Audit converter behavior against the regression suite and add tests for existing cases that are not yet covered.
 
 ## Keep in sync
 Update these notes whenever the architecture, conventions, workflow, or task list changes.

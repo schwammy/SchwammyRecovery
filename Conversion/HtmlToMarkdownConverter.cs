@@ -16,6 +16,20 @@ public interface IHtmlToMarkdownConverter
 
 public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
 {
+    private static readonly string[] CSharpLanguageMarkers =
+    [
+        "namespace ", "class ", "interface ", "enum ", "struct ",
+        "using ", "public ", "protected ", "private ", "internal ",
+        "static ", "override ", "virtual ", "abstract ", "sealed ",
+        "void ", "bool ", "byte ", "char ", "decimal ", "double ",
+        "float ", "int ", "long ", "object ", "short ", "string ",
+        "var ", "return ", "this ", "DateTime", "TimeSpan", "Console.",
+        "CreateChildControls", "HtmlTextWriter", "ListViewItemType",
+        "ListViewItemEventArgs", "ListViewDataItem"
+    ];
+
+    private static readonly string[] CSharpSyntaxMarkers = ["if (", "==", ";"];
+
     public string Convert(
         string html,
         IReadOnlyList<RecoveredImage> images,
@@ -88,6 +102,8 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                     break;
                 }
 
+                var floatingImages = DetachFloatingImages(node);
+
                 ConvertChildren(
                     node,
                     builder,
@@ -97,6 +113,18 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                     listDepth);
 
                 AppendParagraphBreak(builder);
+                foreach (var floatingImage in floatingImages)
+                {
+                    ConvertNode(
+                        floatingImage,
+                        builder,
+                        imagesBySourceUrl,
+                        imagePathPrefix,
+                        imagesDirectory,
+                        listDepth);
+                    AppendParagraphBreak(builder);
+                }
+
                 break;
 
             case "br":
@@ -105,6 +133,19 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                 break;
 
             case "pre":
+                if (LooksLikePlainTextLeadIn(node))
+                {
+                    ConvertChildren(
+                        node,
+                        builder,
+                        imagesBySourceUrl,
+                        imagePathPrefix,
+                        imagesDirectory,
+                        listDepth);
+                    AppendParagraphBreak(builder);
+                    break;
+                }
+
                 AppendCodeBlock(
                     node,
                     builder,
@@ -200,7 +241,7 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                 AppendInlineWrapper(
                     node,
                     builder,
-                    "*",
+                    "_",
                     imagesBySourceUrl,
                     imagePathPrefix,
                     imagesDirectory,
@@ -218,26 +259,40 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                 break;
 
             case "img":
+                if (IsFloatAligned(node))
+                    AppendParagraphBreak(builder);
+
                 AppendImage(
                     node,
                     builder,
                     imagesBySourceUrl,
                     imagePathPrefix,
                     imagesDirectory);
+
+                if (IsFloatAligned(node))
+                    AppendParagraphBreak(builder);
                 break;
 
             case "ul":
-                ConvertList(
-                    node,
-                    builder,
-                    imagesBySourceUrl,
-                    imagePathPrefix,
-                    imagesDirectory,
-                    listDepth,
-                    ordered: false);
-                break;
-
             case "ol":
+                var hasListItems = node.ChildNodes.Any(child =>
+                    child.NodeType == HtmlNodeType.Element &&
+                    child.Name.Equals("li", StringComparison.OrdinalIgnoreCase));
+
+                if (!hasListItems)
+                {
+                    // Preserve malformed legacy list wrappers whose content is paragraph-based.
+                    ConvertChildren(
+                        node,
+                        builder,
+                        imagesBySourceUrl,
+                        imagePathPrefix,
+                        imagesDirectory,
+                        listDepth);
+                    AppendParagraphBreak(builder);
+                    break;
+                }
+
                 ConvertList(
                     node,
                     builder,
@@ -245,7 +300,10 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                     imagePathPrefix,
                     imagesDirectory,
                     listDepth,
-                    ordered: true);
+                    ordered: string.Equals(
+                        node.Name,
+                        "ol",
+                        StringComparison.OrdinalIgnoreCase));
                 break;
 
             case "table":
@@ -279,6 +337,15 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                 break;
 
             case "div":
+                if (LooksLikeLineByLineCodeContainer(node))
+                {
+                    AppendCodeBlock(
+                        node,
+                        builder,
+                        GetCodeLanguage(node));
+                    break;
+                }
+
                 ConvertChildren(
                     node,
                     builder,
@@ -294,13 +361,15 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
             case "font":
             case "label":
             case "small":
+                var inlineContent = new StringBuilder();
                 ConvertChildren(
                     node,
-                    builder,
+                    inlineContent,
                     imagesBySourceUrl,
                     imagePathPrefix,
                     imagesDirectory,
                     listDepth);
+                builder.Append(ApplyInlineStyles(node, inlineContent.ToString()));
                 break;
 
             default:
@@ -355,6 +424,21 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
             return true;
 
         return false;
+    }
+
+    private static bool LooksLikeLineByLineCodeContainer(HtmlNode node)
+    {
+        var style = node.GetAttributeValue("style", string.Empty);
+        var hasMonospaceFont =
+            style.Contains("font-family", StringComparison.OrdinalIgnoreCase) &&
+            (style.Contains("consolas", StringComparison.OrdinalIgnoreCase) ||
+             style.Contains("courier", StringComparison.OrdinalIgnoreCase) ||
+             style.Contains("monospace", StringComparison.OrdinalIgnoreCase));
+        var preCount = node.ChildNodes.Count(child =>
+            child.NodeType == HtmlNodeType.Element &&
+            child.Name.Equals("pre", StringComparison.OrdinalIgnoreCase));
+
+        return hasMonospaceFont && preCount > 1;
     }
 
     private static bool LooksLikeUnformattedCodeSample(HtmlNode node)
@@ -413,6 +497,19 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
         HtmlNode node,
         StringBuilder builder)
     {
+        if (LooksLikeLineByLineCodeContainer(node))
+        {
+            foreach (var child in node.ChildNodes.Where(child =>
+                         child.NodeType == HtmlNodeType.Element &&
+                         child.Name.Equals("pre", StringComparison.OrdinalIgnoreCase)))
+            {
+                AppendCodeText(child, builder);
+                builder.Append('\n');
+            }
+
+            return;
+        }
+
         if (node.NodeType == HtmlNodeType.Text)
         {
             builder.Append(node.InnerText);
@@ -468,16 +565,42 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
             return "html";
         }
 
-        if (text.Contains("CreateChildControls", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("HtmlTextWriter", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("protected override", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("private ", StringComparison.OrdinalIgnoreCase) ||
-            text.Contains("public ", StringComparison.OrdinalIgnoreCase))
+        if (CSharpLanguageMarkers.Any(marker =>
+                text.Contains(marker, StringComparison.OrdinalIgnoreCase)))
+        {
+            return "csharp";
+        }
+
+        var syntaxMarkerCount = CSharpSyntaxMarkers.Count(marker =>
+            text.Contains(marker, StringComparison.OrdinalIgnoreCase));
+        var hasBracePair = text.Contains('{') && text.Contains('}');
+
+        // Syntax-only signals need corroboration; braces alone also occur in JSON.
+        if (syntaxMarkerCount >= 2 ||
+            (syntaxMarkerCount >= 1 && hasBracePair))
         {
             return "csharp";
         }
 
         return "text";
+    }
+
+    private static bool LooksLikePlainTextLeadIn(HtmlNode node)
+    {
+        if (!node.GetAttributeValue("class", string.Empty)
+                .Contains("code", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var text = WebUtility.HtmlDecode(node.InnerText).Trim();
+        return text.Length <= 40 &&
+               text.EndsWith(':') &&
+               text.IndexOfAny([';', '{', '}', '(', ')', '=', '<', '>']) < 0 &&
+               !node.Descendants("span").Any(span =>
+                   span.GetAttributeValue("style", string.Empty).Contains(
+                       "color",
+                       StringComparison.OrdinalIgnoreCase));
     }
 
     private static void AppendHeading(
@@ -533,17 +656,39 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
             trailingBreaks.Insert(0, "  \n");
         }
 
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            builder.Append(trailingBreaks);
+            return;
+        }
+
         var leadingWhitespaceLength = value.Length - value.TrimStart().Length;
         var trailingWhitespaceStart = value.TrimEnd().Length;
         var leadingWhitespace = value[..leadingWhitespaceLength];
         var trailingWhitespace = value[trailingWhitespaceStart..];
         value = value.Trim();
-
         // Close Markdown emphasis before trailing hard breaks so the break stays outside the wrapper.
         builder.Append(leadingWhitespace);
-        builder.Append(marker);
-        builder.Append(value);
-        builder.Append(marker);
+        var visibleText = WebUtility.HtmlDecode(node.InnerText).Trim();
+        var useHtmlEmphasis = marker == "_" &&
+                      visibleText.Length > 0 &&
+                      (char.IsPunctuation(visibleText[0]) ||
+                       char.IsPunctuation(visibleText[^1]));
+
+        if (useHtmlEmphasis)
+        {
+            // Markdown delimiters beside punctuation may be treated literally instead of as emphasis.
+            builder.Append("<em>");
+            builder.Append(value);
+            builder.Append("</em>");
+        }
+        else
+        {
+            builder.Append(marker);
+            builder.Append(value);
+            builder.Append(marker);
+        }
+
         builder.Append(trailingWhitespace);
         builder.Append(trailingBreaks);
     }
@@ -562,13 +707,16 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
 
         if (string.IsNullOrWhiteSpace(href))
         {
+            var inlineContent = new StringBuilder();
             ConvertChildren(
                 node,
-                builder,
+                inlineContent,
                 imagesBySourceUrl,
                 imagePathPrefix,
                 imagesDirectory,
                 listDepth);
+
+            builder.Append(ApplyInlineStyles(node, inlineContent.ToString()));
 
             return;
         }
@@ -581,6 +729,10 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
             if (image is not null)
             {
                 // Preserve destinations on image-only links, including archived video thumbnails.
+                var isFloatAligned = IsFloatAligned(image);
+                if (isFloatAligned)
+                    AppendParagraphBreak(builder);
+
                 builder.Append('[');
                 AppendImage(
                     image,
@@ -591,6 +743,8 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                 builder.Append("](");
                 builder.Append(NormalizePublishedUrl(href.Trim()));
                 builder.Append(')');
+                if (isFloatAligned)
+                    AppendParagraphBreak(builder);
                 return;
             }
 
@@ -605,6 +759,20 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
             return;
         }
 
+        var formattedText = new StringBuilder();
+        ConvertChildren(
+            node,
+            formattedText,
+            imagesBySourceUrl,
+            imagePathPrefix,
+            imagesDirectory,
+            listDepth);
+        text = NormalizeMarkdown(formattedText.ToString()).Trim();
+        text = ApplyInlineStyles(node, text);
+
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+
         builder.Append('[');
         builder.Append(text);
         builder.Append("](");
@@ -612,6 +780,52 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
             NormalizePublishedUrl(
                 href.Trim()));
         builder.Append(')');
+    }
+
+    private static string ApplyInlineStyles(
+        HtmlNode node,
+        string content)
+    {
+        var isBold = false;
+        var isItalic = false;
+        var isUnderlined = false;
+        var style = node.GetAttributeValue("style", string.Empty);
+
+        foreach (var declaration in style.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var separator = declaration.IndexOf(':');
+            if (separator < 0)
+                continue;
+
+            var property = declaration[..separator].Trim();
+            var value = declaration[(separator + 1)..].Trim();
+
+            if (property.Equals("font-weight", StringComparison.OrdinalIgnoreCase))
+            {
+                isBold = value.Equals("bold", StringComparison.OrdinalIgnoreCase) ||
+                         (int.TryParse(value, out var weight) && weight >= 600);
+            }
+            else if (property.Equals("font-style", StringComparison.OrdinalIgnoreCase))
+            {
+                isItalic = value.Equals("italic", StringComparison.OrdinalIgnoreCase);
+            }
+            else if (property.Equals("text-decoration", StringComparison.OrdinalIgnoreCase) ||
+                     property.Equals("text-decoration-line", StringComparison.OrdinalIgnoreCase))
+            {
+                isUnderlined = value.Contains("underline", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        if (isUnderlined)
+            content = $"<u>{content}</u>";
+
+        if (isItalic)
+            content = $"<em>{content}</em>";
+
+        if (isBold)
+            content = $"**{content}**";
+
+        return content;
     }
 
     private static void AppendImage(
@@ -645,6 +859,33 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
         builder.Append(')');
     }
 
+    private static bool IsFloatAligned(HtmlNode image)
+    {
+        var alignment = image.GetAttributeValue("align", string.Empty);
+        return alignment.Equals("left", StringComparison.OrdinalIgnoreCase) ||
+               alignment.Equals("right", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static List<HtmlNode> DetachFloatingImages(HtmlNode paragraph)
+    {
+        var floatingImages = new List<HtmlNode>();
+
+        foreach (var image in paragraph.Descendants("img")
+                     .Where(IsFloatAligned)
+                     .ToList())
+        {
+            var content = image.Ancestors("a").FirstOrDefault() ?? image;
+            var parent = content.ParentNode;
+            if (parent is null)
+                continue;
+
+            floatingImages.Add(content.CloneNode(true));
+            parent.RemoveChild(content);
+        }
+
+        return floatingImages;
+    }
+
     private static string GetImageMarkdownUrl(
         string sourceUrl,
         IReadOnlyDictionary<string, RecoveredImage> imagesBySourceUrl,
@@ -655,7 +896,7 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                 sourceUrl,
                 out var image))
         {
-            return sourceUrl;
+            return NormalizePublishedUrl(sourceUrl);
         }
 
         if (!string.IsNullOrWhiteSpace(image.LinkedImageFileName))
@@ -697,31 +938,34 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
     {
         url = WebUtility.HtmlDecode(url.Trim());
 
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
-            !uri.Host.Equals("web.archive.org", StringComparison.OrdinalIgnoreCase))
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+            uri.Host.Equals("web.archive.org", StringComparison.OrdinalIgnoreCase))
         {
-            return url;
+            const string marker = "/web/";
+            var markerIndex = url.IndexOf(
+                marker,
+                StringComparison.OrdinalIgnoreCase);
+
+            if (markerIndex >= 0)
+            {
+                var remainder = url[(markerIndex + marker.Length)..];
+                var separatorIndex = remainder.IndexOf('/');
+
+                if (separatorIndex >= 0)
+                {
+                    var originalUrl = remainder[(separatorIndex + 1)..];
+
+                    if (originalUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                        originalUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                    {
+                        url = Uri.UnescapeDataString(originalUrl);
+                    }
+                }
+            }
         }
 
-        const string marker = "/web/";
-        var markerIndex = url.IndexOf(
-            marker,
-            StringComparison.OrdinalIgnoreCase);
-
-        if (markerIndex < 0)
-            return url;
-
-        var remainder = url[(markerIndex + marker.Length)..];
-        var separatorIndex = remainder.IndexOf('/');
-
-        if (separatorIndex < 0)
-            return url;
-
-        var originalUrl = remainder[(separatorIndex + 1)..];
-
-        return originalUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-               originalUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
-            ? Uri.UnescapeDataString(originalUrl)
+        return Uri.TryCreate(url, UriKind.Absolute, out var publishedUri)
+            ? publishedUri.AbsoluteUri
             : url;
     }
 
@@ -787,6 +1031,26 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
 
         foreach (var child in node.ChildNodes)
         {
+            // Recovered HTML sometimes places subgroup lists beside, rather than inside, their category item.
+            if (child.NodeType == HtmlNodeType.Element &&
+                (string.Equals(child.Name, "ul", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(child.Name, "ol", StringComparison.OrdinalIgnoreCase)))
+            {
+                ConvertList(
+                    child,
+                    builder,
+                    imagesBySourceUrl,
+                    imagePathPrefix,
+                    imagesDirectory,
+                    listDepth + 1,
+                    string.Equals(
+                        child.Name,
+                        "ol",
+                        StringComparison.OrdinalIgnoreCase));
+
+                continue;
+            }
+
             if (child.NodeType != HtmlNodeType.Element ||
                 !string.Equals(
                     child.Name,
@@ -849,6 +1113,26 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                 .ToList())
             .ToList();
 
+        if (cellsByRow.SelectMany(cells => cells)
+            .Any(cell => cell.Descendants("table").Any() ||
+                         cell.Descendants("blockquote").Any()))
+        {
+            // Layout tables cannot safely wrap nested tables or blockquote syntax in Markdown.
+            foreach (var cell in cellsByRow.SelectMany(cells => cells))
+            {
+                ConvertChildren(
+                    cell,
+                    builder,
+                    imagesBySourceUrl,
+                    imagePathPrefix,
+                    imagesDirectory,
+                    listDepth);
+                AppendParagraphBreak(builder);
+            }
+
+            return;
+        }
+
         // A single row of linked entries reads better as a list than as a wide table.
         if (LooksLikeLinkedRoster(rows, cellsByRow))
         {
@@ -874,9 +1158,9 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
                     imagePathPrefix,
                     imagesDirectory,
                     listDepth);
+                AppendParagraphBreak(builder);
             }
 
-            AppendParagraphBreak(builder);
             return;
         }
 
@@ -905,6 +1189,26 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
         var hasHeader = tableRows[0].Cells.Any(cell =>
             cell.Name.Equals("th", StringComparison.OrdinalIgnoreCase)) ||
                         LooksLikeFormattedHeaderRow(tableRows[0].Cells);
+
+        var dataCellsByRow = tableRows
+            .Select(row => row.Cells)
+            .ToList();
+
+        if (!hasHeader && LooksLikeLinkedNameValueTable(dataCellsByRow))
+        {
+            foreach (var row in tableRows)
+            {
+                EnsureLineStart(builder);
+                builder.Append("- **");
+                builder.Append(row.Values[0]);
+                builder.Append("**: ");
+                builder.Append(row.Values[1]);
+                builder.Append('\n');
+            }
+
+            AppendParagraphBreak(builder);
+            return;
+        }
 
         EnsureLineStart(builder);
 
@@ -953,6 +1257,18 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
             cell.Name.Equals("td", StringComparison.OrdinalIgnoreCase) &&
             cell.ChildNodes.Count(child => child.Name.Equals("br", StringComparison.OrdinalIgnoreCase)) >= 2 &&
             cell.Descendants("a").Count() >= 2);
+    }
+
+    private static bool LooksLikeLinkedNameValueTable(
+        IReadOnlyList<List<HtmlNode>> rows)
+    {
+        return rows.Count >= 2 && rows.All(row =>
+            row.Count == 2 &&
+            row[0].Descendants("a").Count() == 1 &&
+            !row[0].Descendants("img").Any() &&
+            !row[1].Descendants("img").Any() &&
+            !string.IsNullOrWhiteSpace(row[0].InnerText) &&
+            !string.IsNullOrWhiteSpace(row[1].InnerText));
     }
 
     private static bool LooksLikeFormattedHeaderRow(
@@ -1131,7 +1447,11 @@ public sealed class HtmlToMarkdownConverter : IHtmlToMarkdownConverter
         foreach (var line in lines)
         {
             if (string.IsNullOrWhiteSpace(line))
+            {
+                builder.Append(">");
+                builder.Append('\n');
                 continue;
+            }
 
             builder.Append("> ");
             builder.Append(line);

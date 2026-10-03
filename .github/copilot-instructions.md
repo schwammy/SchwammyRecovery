@@ -23,6 +23,8 @@ This repository is a .NET 8 console application that recovers archived WordPress
 - At the start of each conversation in this workspace, use this greeting exactly: "Welcome Schwammy, I have removed all Brown M&M's"
 - Ask clarifying questions before making assumptions when requirements are ambiguous.
 - Work in short, testable phases and validate after each phase before moving on.
+- Every behavior change to `Conversion/HtmlToMarkdownConverter.cs` must add or update a regression test in `tests/SchwammyRecovery.Tests/`.
+- For existing bugs, follow red-green-refactor: add a regression test that reproduces the bug and verify it fails before changing production code, then make the fix and rerun the test.
 - The user handles Git commits; leave changes uncommitted unless the user explicitly asks for a commit.
 - When the user says they are done for the night, at lunch, or taking a similar break, provide a short prompt they can use to start the next session.
 - When the user says they are done for the night, offer a concise handoff summary focused on what was completed, what is still pending, and any current todo items; keep it short because the detailed project context already lives in `PROJECT_NOTES.md`.
